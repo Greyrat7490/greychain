@@ -1,4 +1,6 @@
 mod wallet;
+mod package;
+
 use wallet::Wallet;
 
 fn main() {

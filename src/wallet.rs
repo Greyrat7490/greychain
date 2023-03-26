@@ -6,6 +6,10 @@ use std::{
     sync::{atomic::{AtomicU16, Ordering::Relaxed}, Arc, Mutex}
 };
 
+use crate::package::{Package, PackageType, PACKAGE_SIZE};
+
+const TIMEOUT: Duration = Duration::from_secs(5);
+
 pub struct Wallet {
     pub port: u16,
     online: Arc<Mutex<bool>>,
@@ -27,7 +31,7 @@ impl Wallet {
 
     pub fn send(&self, port: u16, msg: &str) -> bool {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
-        let client = TcpStream::connect_timeout(&addr, Duration::from_secs(5));
+        let client = TcpStream::connect_timeout(&addr, TIMEOUT);
 
         if let Ok(stream) = client {
             send(stream, msg);
@@ -75,11 +79,15 @@ fn recv_loop(online: Arc<Mutex<bool>>, listener: TcpListener) -> JoinHandle<()> 
 }
 
 fn recv(mut stream: TcpStream) {
-    let mut buf = String::new();
-    stream.read_to_string(&mut buf).unwrap();
-    println!("received: {}", buf);
+    let mut buf = [0; PACKAGE_SIZE];
+    stream.read_exact(&mut buf).unwrap();
+
+    let msg = Package::from(buf);
+
+    println!("received:\n{}", msg);
 }
 
 fn send(mut stream: TcpStream, msg: &str) {
-    stream.write(msg.as_bytes()).unwrap();
+    let m = Package::new(PackageType::Msg, msg);
+    stream.write(&m.as_bytes()).unwrap();
 }
