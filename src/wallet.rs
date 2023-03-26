@@ -1,29 +1,48 @@
 use std::{
     net::{TcpListener, TcpStream, SocketAddr, Ipv4Addr, IpAddr},
     io::{Read, Write}, 
-    thread,
+    thread::{self, JoinHandle},
     time::Duration, 
-    sync::atomic::{AtomicU16, Ordering::Relaxed}
+    sync::{atomic::{AtomicU16, Ordering::Relaxed}, Arc, Mutex}
 };
 
 pub struct Wallet {
-    pub port: u16
+    pub port: u16,
+    online: Arc<Mutex<bool>>,
+    recv_thread: JoinHandle<()>
 }
 
 impl Wallet {
     pub fn new() -> Wallet {
-        let port = init_server();
-        if let Some(port) = port {
-            init_client(port);
+        if let Some((port, listener)) = init_receiver() {
+            let online = Arc::new(Mutex::new(true));
+            let recv_thread = recv_loop(Arc::clone(&online), listener);
 
             println!("created new wallet at port {}", port);
-            return Wallet{ port };
+            return Wallet{ port, online, recv_thread };
         } else {
-            println!("ERROR: could not create socket");
-            println!("INFO: wallet is offline");
+            panic!("ERROR: could not create socket");
         }
+    }
 
-        return Wallet { port: 0 };
+    pub fn send(&self, port: u16, msg: &str) -> bool {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
+        let client = TcpStream::connect_timeout(&addr, Duration::from_secs(5));
+
+        if let Ok(stream) = client {
+            send(stream, msg);
+            return true;
+        } else {
+            println!("could not properly connect to server");
+            return false;
+        }
+    }
+
+    pub fn shutdown(self) {
+        *self.online.lock().unwrap() = false;
+        self.recv_thread.join().unwrap();
+
+        println!("wallet is offline now");
     }
 }
 
@@ -32,51 +51,35 @@ fn get_next_port() -> u16 {
     return NEXT_PORT.fetch_add(1, Relaxed);
 }
 
-fn init_server() -> Option<u16> {
+fn init_receiver() -> Option<(u16, TcpListener)> {
     let port = get_next_port(); 
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
     let listener = TcpListener::bind(addr).unwrap();
+    listener.set_nonblocking(true).unwrap();
     // TODO: handle error (if port in use next port)
 
-    thread::spawn(move || {
-        for stream in listener.incoming() {
-            if let Ok(stream) = stream {
-                println!("connected to client");
+    return Some((port, listener));
+}
 
-                send(stream);
-            } else {
-                panic!("could not properly connect to client")
+fn recv_loop(online: Arc<Mutex<bool>>, listener: TcpListener) -> JoinHandle<()> {
+    return thread::spawn(move || {
+        // TODO: better spin lock
+        while *online.lock().unwrap() {
+            let stream = listener.accept();
+
+            if let Ok((stream, _)) = stream {
+                recv(stream);
             }
         }
     });
-
-    return Some(port);
-}
-
-fn init_client(port: u16) {
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
-    let client = TcpStream::connect_timeout(&addr, Duration::from_secs(5));
-
-    if let Ok(stream) = client {
-        println!("connected to server");
-
-        recv(stream);
-    } else {
-        panic!("could not properly connect to server")
-    }
 }
 
 fn recv(mut stream: TcpStream) {
-    println!("recv msg");
-
     let mut buf = String::new();
     stream.read_to_string(&mut buf).unwrap();
-
-    println!("recieved: {}", buf);
+    println!("received: {}", buf);
 }
 
-fn send(mut stream: TcpStream) {
-    println!("send msg");
-
-    stream.write(b"test message").unwrap();
+fn send(mut stream: TcpStream, msg: &str) {
+    stream.write(msg.as_bytes()).unwrap();
 }
