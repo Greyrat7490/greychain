@@ -6,7 +6,7 @@ use std::{
     sync::{atomic::{AtomicU16, Ordering::Relaxed}, Arc, Mutex}
 };
 
-use crate::package::{Package, PackageType, PACKAGE_SIZE};
+use crate::{package::{Package, PACKAGE_SIZE}, transaction::Transaction};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -29,12 +29,25 @@ impl Wallet {
         }
     }
 
-    pub fn send(&self, port: u16, msg: &str) -> bool {
+    pub fn send_msg(&self, port: u16, msg: &str) -> bool {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
         let client = TcpStream::connect_timeout(&addr, TIMEOUT);
 
         if let Ok(stream) = client {
-            send(stream, msg);
+            send(stream, Package::new_msg(msg));
+            return true;
+        } else {
+            println!("could not properly connect to server");
+            return false;
+        }
+    }
+
+    pub fn send_tx(&self, port: u16, tx: Transaction) -> bool {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
+        let client = TcpStream::connect_timeout(&addr, TIMEOUT);
+
+        if let Ok(stream) = client {
+            send(stream, Package::new_tx(tx));
             return true;
         } else {
             println!("could not properly connect to server");
@@ -87,7 +100,6 @@ fn recv(mut stream: TcpStream) {
     println!("received:\n{}", msg);
 }
 
-fn send(mut stream: TcpStream, msg: &str) {
-    let m = Package::new(PackageType::Msg, msg);
-    stream.write(&m.as_bytes()).unwrap();
+fn send(mut stream: TcpStream, pkg: Package) {
+    stream.write(&pkg.as_bytes()).unwrap();
 }
