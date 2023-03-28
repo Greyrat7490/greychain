@@ -1,9 +1,13 @@
 mod wallet;
 mod package;
 mod transaction;
+mod net;
 
 use wallet::Wallet;
-use transaction::Transaction;
+
+extern crate rsa;
+extern crate rand;
+extern crate digest;
 
 fn main() {
     let wallet1 = Wallet::new();
@@ -15,8 +19,8 @@ fn main() {
     wallet1.send_msg(wallet2.port, "send message from wallet1 to wallet2");
     wallet2.send_msg(wallet1.port, "send message from wallet2 to wallet1");
 
-    wallet1.send_tx(wallet2.port, Transaction::new("wallet1", "wallet2", 420.69));
-    wallet2.send_tx(wallet1.port, Transaction::new("wallet2", "wallet1", 69.64));
+    wallet1.send_tx(wallet2.port, &wallet2.pub_key, 420.69);
+    wallet2.send_tx(wallet1.port, &wallet1.pub_key, 69.64);
 
     wallet1.shutdown();
     wallet2.shutdown();

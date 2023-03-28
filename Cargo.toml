@@ -6,3 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+digest = "0.10.6"
+rand = "0.8.5"
+rsa = { version = "0.8.2", features = ["sha2"] }
+
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
