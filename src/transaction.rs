@@ -1,4 +1,4 @@
-use std::{fmt::Display, mem::{transmute, size_of, size_of_val}, sync::atomic::AtomicU64};
+use std::{fmt::Display, mem::size_of, sync::atomic::AtomicU64};
 
 use rsa::{
     RsaPublicKey,
@@ -9,7 +9,7 @@ use rsa::{
     signature::{RandomizedSigner, Verifier}
 };
 
-use crate::net::pkg::{PKG_SIZE, PKG_CONTENT_SIZE};
+use crate::net::{pkg::{PKG_SIZE, PKG_CONTENT_SIZE}, serialize::Serializer};
 
 #[derive(Clone)]
 pub struct Transaction {
@@ -31,96 +31,45 @@ impl Transaction {
         let sign_key = BlindedSigningKey::<Sha256>::from(priv_key.clone());
         let mut rng = rand::thread_rng();
 
-        let content = b"tmp content"; // TODO: id, amount, payer and payee to bytes as content
-        let sign = sign_key.sign_with_rng(&mut rng, content);
-
         let payer = payer.to_public_key_pem(rsa::pkcs8::LineEnding::LF).unwrap();
         let payee = payee.to_public_key_pem(rsa::pkcs8::LineEnding::LF).unwrap();
 
-        return Transaction { id: get_next_id(), payer: payer.to_owned(), payee: payee.to_owned(), amount, sign };
+        let id = get_next_id();
+
+        let mut content = vec![0u8; PKG_CONTENT_SIZE];
+        serialize_content(id, amount, &payer, &payee, &mut content);
+
+        let sign = sign_key.sign_with_rng(&mut rng, &content);
+
+        return Transaction { id, payer: payer.to_owned(), payee: payee.to_owned(), amount, sign };
     }
 
     pub fn deserialize(pkg: [u8; PKG_SIZE]) -> Transaction {
         let mut start: usize = 1;
-        let mut end: usize = start + size_of::<u64>();
 
-        let id: u64 = unsafe { 
-            let ptr = pkg[start..].as_ptr() as *const u64;
-            (*ptr).clone()
-        };
+        let id = u64::deserialize(&pkg[start..]);
         start += size_of::<u64>();
-        end += size_of::<f64>();
 
-        let amount: f64 = unsafe { 
-            let ptr = pkg[start..].as_ptr() as *const f64;
-            (*ptr).clone()
-        };
+        let amount = f64::deserialize(&pkg[start..]);
         start += size_of::<f64>();
-        end += size_of::<usize>();
 
-        let payer_size: usize = unsafe { 
-            let ptr = pkg[start..].as_ptr() as *const usize;
-            (*ptr).clone()
-        };
-        start += size_of::<usize>();
-        end += payer_size;
-        let payer: String = String::from_utf8_lossy(&pkg[start..end]).to_string();
-        start += payer_size;
-        end += size_of::<usize>();
+        let payer = String::deserialize(&pkg[start..]);
+        start += payer.len() + size_of::<usize>();
 
-        let payee_size: usize = unsafe { 
-            let ptr = pkg[start..].as_ptr() as *const usize;
-            (*ptr).clone()
-        };
-        start += size_of::<usize>();
-        end += payee_size;
-        let payee: String = String::from_utf8_lossy(&pkg[start..end]).to_string();
-        start += payee_size;
-        end +=  size_of::<usize>();
+        let payee = String::deserialize(&pkg[start..]);
+        start += payee.len() + size_of::<usize>();
 
-        let sign_size: usize = unsafe { 
-            let ptr = pkg[start..].as_ptr() as *const usize;
-            (*ptr).clone()
-        };
-        start += size_of::<usize>();
-        end += sign_size;
-        let sign = Signature::try_from(&pkg[start..end]).unwrap();
+        let sign = Signature::deserialize(&pkg[start..]);
 
         return Transaction { id, amount, payer, payee, sign };
     }
 
     pub fn serialize(&self) -> [u8; PKG_CONTENT_SIZE] {
         let mut buf: [u8; PKG_CONTENT_SIZE] = [0; PKG_CONTENT_SIZE];
-        let mut start: usize = 0;
-        let mut end: usize = size_of::<u64>();
 
-        buf[start..end].copy_from_slice(unsafe { &transmute::<u64, [u8; 8]>(self.id) });
-        start += size_of::<u64>();
-        end += size_of::<f64>();
-        buf[start..end].copy_from_slice(unsafe { &transmute::<f64, [u8; 8]>(self.amount) });
-        start += size_of::<f64>();
-        end += size_of::<usize>();
+        let start = serialize_content(self.id, self.amount, &self.payer, &self.payee, &mut buf);
 
-        buf[start..end].copy_from_slice(unsafe { &transmute::<usize, [u8; 8]>(self.payer.len()) });
-        start += size_of::<usize>();
-        end += self.payer.len();
-        buf[start..end].copy_from_slice(self.payer.as_bytes());
-        start += self.payer.len();
-        end += size_of::<usize>();
-
-        buf[start..end].copy_from_slice(unsafe { &transmute::<usize, [u8; 8]>(self.payee.len()) });
-        start += size_of::<usize>();
-        end += self.payee.len();
-        buf[start..end].copy_from_slice(self.payee.as_bytes());
-        start += self.payee.len();
-        end += size_of::<usize>();
-
-        let sign_as_bytes = Box::<[u8]>::from(self.sign.clone());
-        let sign_size = size_of_val(&*sign_as_bytes);
-        buf[start..end].copy_from_slice(unsafe { &transmute::<usize, [u8; 8]>(sign_size) });
-        start += size_of::<usize>();
-        end += sign_size;
-        buf[start..end].copy_from_slice(&*sign_as_bytes);
+        self.sign.serialize(&mut buf[start..]);
 
         return buf;
     }
@@ -129,8 +78,11 @@ impl Transaction {
         let pub_key = RsaPublicKey::from_public_key_pem(&self.payer)
             .expect("ERROR: could not get public key from pem");
         let verify_key = VerifyingKey::<Sha256>::from(pub_key);
-        let content = b"tmp content"; // TODO: id, amount, payer and payee to bytes as content
-        if let Ok(..) = verify_key.verify(content, &self.sign) {
+
+        let mut content = vec![0u8; PKG_CONTENT_SIZE];
+        serialize_content(self.id, self.amount, &self.payer, &self.payee, &mut content);
+
+        if let Ok(..) = verify_key.verify(&content, &self.sign) {
             return true;
         } else {
             println!("ERROR: invalid transaction (corrupted)");
@@ -143,4 +95,23 @@ impl Display for Transaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         return write!(f, "id: {}\namount: {} GRY\npayer:\n{}payee:\n{}", self.id, self.amount, self.payer, self.payee);
     }
+}
+
+
+fn serialize_content(id: u64, amount: f64, payer: &String, payee: &String, dst: &mut [u8]) -> usize {
+    let mut start: usize = 0;
+
+    id.serialize(&mut dst[start..]);
+    start += size_of::<u64>();
+
+    amount.serialize(&mut dst[start..]);
+    start += size_of::<f64>();
+
+    payer.serialize(&mut dst[start..]);
+    start += payer.len() + size_of::<usize>();
+
+    payee.serialize(&mut dst[start..]);
+    start += payee.len() + size_of::<usize>();
+
+    return start
 }
