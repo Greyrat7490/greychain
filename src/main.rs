@@ -1,5 +1,4 @@
 mod wallet;
-mod package;
 mod transaction;
 mod net;
 

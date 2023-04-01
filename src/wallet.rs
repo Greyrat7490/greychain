@@ -5,7 +5,10 @@ use std::{
     sync::{Arc, Mutex}
 };
 
-use crate::{package::Package, net, transaction::Transaction};
+use crate::{
+    net::{tcp::init_receiver, tcp::recv_loop, tcp::send, pkg::Package},
+    transaction::Transaction
+};
 
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
@@ -26,9 +29,9 @@ impl Wallet {
         let priv_key = RsaPrivateKey::new(&mut rng, RSA_BITS).expect("ERROR: could not create key");
         let pub_key = RsaPublicKey::from(&priv_key);
         
-        let (port, listener) = net::init_receiver().expect("ERROR: could not create socket");
+        let (port, listener) = init_receiver().expect("ERROR: could not create socket");
         let online = Arc::new(Mutex::new(true));
-        let recv_thread = net::recv_loop(Arc::clone(&online), listener);
+        let recv_thread = recv_loop(Arc::clone(&online), listener);
 
         println!("created new wallet at port {}", port);
         return Wallet{ port, online, recv_thread, priv_key, pub_key };
@@ -39,7 +42,7 @@ impl Wallet {
         let client = TcpStream::connect_timeout(&addr, TIMEOUT);
 
         if let Ok(stream) = client {
-            net::send(stream, Package::new_msg(msg));
+            send(stream, Package::new_msg(msg));
             return true;
         } else {
             println!("could not properly connect to server");
@@ -53,7 +56,7 @@ impl Wallet {
 
         if let Ok(stream) = client {
             let tx = Transaction::new(&self.pub_key, payee, &self.priv_key, amount);
-            net::send(stream, Package::new_tx(tx));
+            send(stream, Package::new_tx(tx));
             return true;
         } else {
             println!("could not properly connect to server");

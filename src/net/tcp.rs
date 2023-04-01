@@ -5,7 +5,7 @@ use std::{
     sync::{atomic::{AtomicU16, Ordering::Relaxed}, Arc, Mutex}
 };
 
-use crate::package::{Package, PKG_SIZE};
+use super::pkg::{Package, PKG_SIZE};
 
 fn get_next_port() -> u16 {
     static NEXT_PORT: AtomicU16 = AtomicU16::new(6969);
@@ -39,13 +39,13 @@ pub fn recv(mut stream: TcpStream) {
     let mut buf = [0; PKG_SIZE];
     stream.read_exact(&mut buf).unwrap();
 
-    let msg = Package::from(buf);
-    if !msg.verify() {
+    let content = Package::deserialize(buf);
+    if !content.verify() {
         println!("ERROR: package is corrupted");
     }
-    println!("received:\n{}", msg);
+    println!("received:\n{}", content);
 }
 
 pub fn send(mut stream: TcpStream, pkg: Package) {
-    stream.write(&pkg.as_bytes()).unwrap();
+    stream.write(&pkg.serialize()).unwrap();
 }

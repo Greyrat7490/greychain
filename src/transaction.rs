@@ -9,7 +9,7 @@ use rsa::{
     signature::{RandomizedSigner, Verifier}
 };
 
-use crate::package::{PKG_SIZE, PKG_CONTENT_SIZE};
+use crate::net::pkg::{PKG_SIZE, PKG_CONTENT_SIZE};
 
 #[derive(Clone)]
 pub struct Transaction {
@@ -40,7 +40,7 @@ impl Transaction {
         return Transaction { id: get_next_id(), payer: payer.to_owned(), payee: payee.to_owned(), amount, sign };
     }
 
-    pub fn from(pkg: [u8; PKG_SIZE]) -> Transaction {
+    pub fn deserialize(pkg: [u8; PKG_SIZE]) -> Transaction {
         let mut start: usize = 1;
         let mut end: usize = start + size_of::<u64>();
 
@@ -89,7 +89,7 @@ impl Transaction {
         return Transaction { id, amount, payer, payee, sign };
     }
 
-    pub fn as_bytes(&self) -> [u8; PKG_CONTENT_SIZE] {
+    pub fn serialize(&self) -> [u8; PKG_CONTENT_SIZE] {
         let mut buf: [u8; PKG_CONTENT_SIZE] = [0; PKG_CONTENT_SIZE];
         let mut start: usize = 0;
         let mut end: usize = size_of::<u64>();

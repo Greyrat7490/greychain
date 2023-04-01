@@ -12,6 +12,7 @@ pub enum PackageType {
 }
 
 #[repr(C, packed)]
+#[derive(Clone)]
 pub struct Package {
     pub typ: PackageType,
     pub content: [u8; PKG_CONTENT_SIZE]
@@ -25,18 +26,15 @@ impl Package {
     }
 
     pub fn new_tx(tx: Transaction) -> Package {
-        return Package{ typ: PackageType::Tx, content: tx.as_bytes() };
+        return Package{ typ: PackageType::Tx, content: tx.serialize() };
     }
 
-    pub fn from(bytes: [u8; PKG_SIZE]) -> Package {
+    pub fn deserialize(bytes: [u8; PKG_SIZE]) -> Package {
         return unsafe { mem::transmute(bytes) }
     }
 
-    pub fn as_bytes(&self) -> [u8; PKG_SIZE] {
-        let mut res: [u8; PKG_SIZE] = [0; PKG_SIZE];
-        res[0] = self.typ as u8;
-        res[1..].copy_from_slice(self.content.as_slice());
-        return res;
+    pub fn serialize(&self) -> [u8; PKG_SIZE] {
+        return unsafe { mem::transmute(self.clone()) }
     }
 
     pub fn verify(&self) -> bool {
@@ -48,7 +46,7 @@ impl Package {
             }
 
             PackageType::Tx => {
-                return Transaction::from(self.as_bytes()).verify();
+                return Transaction::deserialize(self.serialize()).verify();
             }
 
             PackageType::Block => { return false; }
@@ -65,7 +63,7 @@ impl Display for Package {
             }
 
             PackageType::Tx => {
-                Transaction::from(self.as_bytes()).to_string()
+                Transaction::deserialize(self.serialize()).to_string()
             }
 
             PackageType::Block => {
