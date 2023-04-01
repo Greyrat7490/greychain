@@ -1,6 +1,6 @@
 use std::{mem::{self, size_of}, fmt::Display};
 
-use crate::transaction::Transaction;
+use crate::blockchain::Transaction;
 
 pub const PKG_SIZE: usize = size_of::<Package>();
 pub const PKG_CONTENT_SIZE: usize = 2000;
@@ -46,7 +46,7 @@ impl Package {
             }
 
             PackageType::Tx => {
-                return Transaction::deserialize(self.serialize()).verify();
+                return Transaction::deserialize(self.content).verify();
             }
 
             PackageType::Block => { return false; }
@@ -63,7 +63,7 @@ impl Display for Package {
             }
 
             PackageType::Tx => {
-                Transaction::deserialize(self.serialize()).to_string()
+                Transaction::deserialize(self.content).to_string()
             }
 
             PackageType::Block => {

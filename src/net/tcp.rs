@@ -1,8 +1,7 @@
 use std::{
     net::{TcpListener, TcpStream, SocketAddr, Ipv4Addr, IpAddr},
     io::{Read, Write}, 
-    thread::{self, JoinHandle},
-    sync::{atomic::{AtomicU16, Ordering::Relaxed}, Arc, Mutex}
+    sync::atomic::{AtomicU16, Ordering::Relaxed}
 };
 
 use super::pkg::{Package, PKG_SIZE};
@@ -22,28 +21,16 @@ pub fn init_receiver() -> Option<(u16, TcpListener)> {
     return Some((port, listener));
 }
 
-pub fn recv_loop(online: Arc<Mutex<bool>>, listener: TcpListener) -> JoinHandle<()> {
-    return thread::spawn(move || {
-        // TODO: better spin lock?
-        while *online.lock().unwrap() {
-            let stream = listener.accept();
-
-            if let Ok((stream, _)) = stream {
-                recv(stream);
-            }
-        }
-    });
-}
-
-pub fn recv(mut stream: TcpStream) {
+pub fn recv(mut stream: TcpStream) -> Package {
     let mut buf = [0; PKG_SIZE];
     stream.read_exact(&mut buf).unwrap();
 
-    let content = Package::deserialize(buf);
-    if !content.verify() {
+    let pkg = Package::deserialize(buf);
+    if !pkg.verify() {
         println!("ERROR: package is corrupted");
     }
-    println!("received:\n{}", content);
+
+    return pkg;
 }
 
 pub fn send(mut stream: TcpStream, pkg: Package) {

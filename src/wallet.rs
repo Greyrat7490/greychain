@@ -1,19 +1,20 @@
 use std::{
-    net::{TcpStream, SocketAddr, Ipv4Addr, IpAddr},
-    thread::JoinHandle,
+    net::{TcpStream, SocketAddr, Ipv4Addr, IpAddr, TcpListener},
+    thread::{JoinHandle, self},
     time::Duration, 
-    sync::{Arc, Mutex}
+    sync::{Arc, Mutex}, fs
 };
 
 use crate::{
-    net::{tcp::init_receiver, tcp::recv_loop, tcp::send, pkg::Package},
-    transaction::Transaction
+    net::{tcp::init_receiver, tcp::recv, tcp::send, pkg::{Package, PackageType}},
+    blockchain::{Blockchain, Transaction, Block}
 };
 
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const RSA_BITS: usize = 2048;
+const BLOCKCHAINS_DIR: &str = "blockchains";
 
 pub struct Wallet {
     pub port: u16,
@@ -21,6 +22,7 @@ pub struct Wallet {
     recv_thread: JoinHandle<()>,
     pub pub_key: RsaPublicKey,
     priv_key: RsaPrivateKey,
+    blochchain: Arc<Mutex<Blockchain>>,
 }
 
 impl Wallet {
@@ -31,10 +33,13 @@ impl Wallet {
         
         let (port, listener) = init_receiver().expect("ERROR: could not create socket");
         let online = Arc::new(Mutex::new(true));
-        let recv_thread = recv_loop(Arc::clone(&online), listener);
+
+        let blochchain = Arc::new(Mutex::new(Blockchain::new()));
+
+        let recv_thread = recv_loop(Arc::clone(&online), listener, Arc::clone(&blochchain));
 
         println!("created new wallet at port {}", port);
-        return Wallet{ port, online, recv_thread, priv_key, pub_key };
+        return Wallet{ port, online, recv_thread, priv_key, pub_key, blochchain };
     }
 
     pub fn send_msg(&self, port: u16, msg: &str) -> bool {
@@ -68,7 +73,60 @@ impl Wallet {
         *self.online.lock().unwrap() = false;
         self.recv_thread.join().unwrap();
 
+        save_blockchain(&self.blochchain.lock().unwrap(), &format!("wallet{}", self.port));
+
         println!("wallet is offline now");
+    }
+
+    pub fn save_blockchain(&self) {
+        save_blockchain(&self.blochchain.lock().unwrap(), &self.get_name());
+    }
+
+    pub fn get_name(&self) -> String {
+        return format!("wallet{}", self.port);
+    }
+}
+
+fn recv_loop(online: Arc<Mutex<bool>>, listener: TcpListener, blockchain: Arc<Mutex<Blockchain>>) -> JoinHandle<()> {
+    return thread::spawn(move || {
+        // TODO: better spin lock?
+        while *online.lock().unwrap() {
+            let stream = listener.accept();
+
+            if let Ok((stream, _)) = stream {
+                let pkg = recv(stream);
+                println!("received pkg type: {:?}", pkg.typ);
+                handle_pkg(pkg, &blockchain);
+            }
+        }
+    });
+}
+
+fn handle_pkg(pkg: Package, blockchain: &Arc<Mutex<Blockchain>>) {
+    match pkg.typ {
+        PackageType::Msg => {}
+        PackageType::Tx => {
+            let tx = Transaction::deserialize(pkg.content);
+            let block = Block::new(tx);
+
+            blockchain.lock().unwrap().add_block(block);
+        }
+        PackageType::Block => {}
+        PackageType::Fork => {}
+    }
+
+    println!("{}", pkg);
+}
+
+fn save_blockchain(blockchain: &Blockchain, name: &str) {
+    fs::create_dir_all(BLOCKCHAINS_DIR).unwrap();
+
+    let content = blockchain.to_string();
+
+    if let Err(err) = fs::write(BLOCKCHAINS_DIR.to_owned() + "/" + name, &content) {
+        println!("{}", err);
+    } else {
+        println!("saved blockchain to {}", name);
     }
 }
 
