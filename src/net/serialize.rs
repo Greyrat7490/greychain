@@ -2,6 +2,8 @@ use std::mem::{transmute, size_of, size_of_val};
 
 use rsa::pss::Signature;
 
+use super::pkg::PackageType;
+
 pub trait Serializer {
     fn serialize(&self, dst: &mut [u8]);
     fn deserialize(bytes: &[u8]) -> Self;
@@ -32,6 +34,20 @@ impl Serializer for u64 {
     fn deserialize(bytes: &[u8]) -> Self {
         return unsafe { 
             let ptr = bytes.as_ptr() as *const u64;
+            (*ptr).clone()
+        };
+    }
+}
+
+impl Serializer for PackageType {
+    fn serialize(&self, dst: &mut [u8]) {
+        const SIZE: usize = size_of::<PackageType>();
+        dst[..SIZE].copy_from_slice(unsafe { &transmute::<PackageType, [u8; SIZE]>(*self) });
+    }
+
+    fn deserialize(bytes: &[u8]) -> Self {
+        return unsafe { 
+            let ptr = bytes.as_ptr() as *const PackageType;
             (*ptr).clone()
         };
     }

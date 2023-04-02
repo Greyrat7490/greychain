@@ -10,7 +10,7 @@ use crate::{
     blockchain::{Blockchain, Transaction, Block}
 };
 
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use rsa::{RsaPrivateKey, RsaPublicKey, sha2::Sha256, pss::BlindedSigningKey};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const RSA_BITS: usize = 2048;
@@ -47,8 +47,11 @@ impl Wallet {
         let client = TcpStream::connect_timeout(&addr, TIMEOUT);
 
         if let Ok(stream) = client {
-            let tx = Transaction::new(&self.pub_key, payee, &self.priv_key, amount);
-            send(stream, Package::new_tx(tx));
+            let tx = Transaction::new(&self.pub_key, payee, amount);
+            let sign_key = BlindedSigningKey::<Sha256>::from(self.priv_key.clone());
+
+            send(stream, Package::new_tx(tx, sign_key));
+
             return true;
         } else {
             println!("could not properly connect to server");
