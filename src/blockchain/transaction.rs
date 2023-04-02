@@ -9,7 +9,7 @@ use rsa::{
     signature::{RandomizedSigner, Verifier}
 };
 
-use crate::net::{pkg::{PKG_SIZE, PKG_CONTENT_SIZE}, serialize::Serializer};
+use crate::net::{pkg::PKG_CONTENT_SIZE, serialize::Serializer};
 
 #[derive(Clone)]
 pub struct Transaction {

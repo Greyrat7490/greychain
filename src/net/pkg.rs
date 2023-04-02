@@ -8,7 +8,7 @@ pub const PKG_CONTENT_SIZE: usize = 2000;
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 pub enum PackageType {
-    Msg, Tx, Block, Fork
+    Tx, Block, Fork
 }
 
 #[repr(C, packed)]
@@ -19,12 +19,6 @@ pub struct Package {
 }
 
 impl Package {
-    pub fn new_msg(s: &str) -> Package {
-        let mut content: [u8; PKG_CONTENT_SIZE] = [0; PKG_CONTENT_SIZE];
-        content[..s.len()].copy_from_slice(&s.as_bytes());
-        return Package{ typ: PackageType::Msg, content };
-    }
-
     pub fn new_tx(tx: Transaction) -> Package {
         return Package{ typ: PackageType::Tx, content: tx.serialize() };
     }
@@ -39,12 +33,6 @@ impl Package {
 
     pub fn verify(&self) -> bool {
         match self.typ {
-            PackageType::Msg => {
-                // TODO
-                println!("TODO: verify msg Package in work (always false for now)");
-                return false;
-            }
-
             PackageType::Tx => {
                 return Transaction::deserialize(self.content).verify();
             }
@@ -58,10 +46,6 @@ impl Package {
 impl Display for Package {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let content_str = match self.typ {
-            PackageType::Msg => {
-                String::from_utf8_lossy(&self.content).to_string()
-            }
-
             PackageType::Tx => {
                 Transaction::deserialize(self.content).to_string()
             }

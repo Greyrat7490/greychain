@@ -42,19 +42,6 @@ impl Wallet {
         return Wallet{ port, online, recv_thread, priv_key, pub_key, blochchain };
     }
 
-    pub fn send_msg(&self, port: u16, msg: &str) -> bool {
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
-        let client = TcpStream::connect_timeout(&addr, TIMEOUT);
-
-        if let Ok(stream) = client {
-            send(stream, Package::new_msg(msg));
-            return true;
-        } else {
-            println!("could not properly connect to server");
-            return false;
-        }
-    }
-
     pub fn send_tx(&self, port: u16, payee: &RsaPublicKey, amount: f64) -> bool {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
         let client = TcpStream::connect_timeout(&addr, TIMEOUT);
@@ -104,7 +91,6 @@ fn recv_loop(online: Arc<Mutex<bool>>, listener: TcpListener, blockchain: Arc<Mu
 
 fn handle_pkg(pkg: Package, blockchain: &Arc<Mutex<Blockchain>>) {
     match pkg.typ {
-        PackageType::Msg => {}
         PackageType::Tx => {
             let tx = Transaction::deserialize(pkg.content);
             let block = Block::new(tx);
