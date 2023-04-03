@@ -1,6 +1,7 @@
 mod wallet;
 mod net;
 mod blockchain;
+mod crypto;
 
 use wallet::Wallet;
 

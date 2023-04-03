@@ -1,4 +1,4 @@
-use std::{mem::{self, size_of}, fmt::Display};
+use std::{mem::{self, size_of, size_of_val}, fmt::Display};
 
 use rsa::{
     pss::{Signature, VerifyingKey, BlindedSigningKey},
@@ -7,12 +7,15 @@ use rsa::{
     signature::{Verifier, RandomizedSigner}
 };
 
-use crate::blockchain::Transaction;
+use crate::{blockchain::Transaction, crypto::{RSA_BYTES, RSA_PEM_SIZE}};
 
 use super::serialize::Serializer;
 
 pub const PKG_CONTENT_SIZE: usize = 2000;
-pub const PKG_SIZE: usize = PKG_CONTENT_SIZE + 1000;
+pub const PKG_SIZE: usize = size_of::<PackageType>() + 
+                            PKG_CONTENT_SIZE +
+                            RSA_PEM_SIZE + size_of::<usize>() +
+                            RSA_BYTES + size_of::<usize>();
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
@@ -58,6 +61,12 @@ impl Package {
     pub fn serialize(&self) -> [u8; PKG_SIZE] {
         let mut buf = [0u8; PKG_SIZE];
         let mut start: usize = 0;
+
+        let sign_as_bytes = Box::<[u8]>::from(self.sign.clone());
+        let sign_size = size_of_val(&*sign_as_bytes);
+
+        println!("{} {}", self.sender.as_bytes().len(), sign_size);
+        println!("{}", PKG_SIZE);
 
         self.typ.serialize(&mut buf[start..]);
         start += size_of::<PackageType>();
