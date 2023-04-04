@@ -92,9 +92,10 @@ fn handle_pkg(pkg: Package, blockchain: &Arc<Mutex<Blockchain>>) {
     match pkg.typ {
         PackageType::Tx => {
             let tx = Transaction::deserialize(pkg.content);
-            let block = Block::new(tx);
 
-            blockchain.lock().unwrap().add_block(block);
+            let blockchain = &mut blockchain.lock().unwrap();
+            let block = Block::new(tx, blockchain.cur_hash, blockchain.get_round());
+            blockchain.add_block(block);
         }
         PackageType::Block => {}
         PackageType::Fork => {}

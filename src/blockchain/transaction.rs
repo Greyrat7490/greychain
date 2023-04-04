@@ -1,4 +1,4 @@
-use std::{fmt::Display, mem::size_of, sync::atomic::AtomicU64};
+use std::{fmt::Display, mem::size_of, sync::atomic::AtomicU64, hash::Hash};
 
 use rsa::{
     RsaPublicKey,
@@ -69,5 +69,14 @@ impl Display for Transaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         return write!(f, "id: {}\namount: {} GRY\npayer:\n{}payee:\n{}",
                       self.id, self.amount, self.payer, &self.payee[..self.payee.len()-1]);
+    }
+}
+
+impl Hash for Transaction {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.amount.to_be_bytes().hash(state);
+        self.payer.hash(state);
+        self.payee.hash(state);
     }
 }

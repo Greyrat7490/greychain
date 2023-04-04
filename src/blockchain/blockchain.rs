@@ -3,16 +3,30 @@ use std::fmt::Display;
 use super::Block;
 
 pub struct Blockchain {
-    blocks: Vec<Block>
+    blocks: Vec<Block>,
+    pub cur_hash: u64
 }
 
 impl Blockchain {
     pub fn new() -> Blockchain {
-        return Blockchain{ blocks: Vec::new() };
+        return Blockchain{ blocks: Vec::new(), cur_hash: 0x0 };
     }
 
     pub fn add_block(&mut self, block: Block) {
-        self.blocks.push(block);
+        if self.verify(&block) {
+            self.cur_hash = block.hash;
+            self.blocks.push(block);
+        } else {
+            println!("could not add block to blockchain (hashes are not matching)");
+        }
+    }
+
+    pub fn get_round(&self) -> usize {
+        return self.blocks.len();
+    }
+
+    fn verify(&self, block: &Block) -> bool {
+        return block.prev_hash == self.cur_hash;
     }
 }
 
