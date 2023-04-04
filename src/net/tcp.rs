@@ -12,7 +12,7 @@ fn get_next_port() -> u16 {
 }
 
 pub fn init_receiver() -> Option<(u16, TcpListener)> {
-    let port = get_next_port(); 
+    let port = get_next_port();
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
     let listener = TcpListener::bind(addr).unwrap();
     listener.set_nonblocking(true).unwrap();

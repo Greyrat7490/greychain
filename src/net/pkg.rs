@@ -1,4 +1,4 @@
-use std::{mem::{self, size_of, size_of_val}, fmt::Display};
+use std::{mem::{size_of, size_of_val}, fmt::Display};
 
 use rsa::{
     pss::{Signature, VerifyingKey, BlindedSigningKey},
@@ -61,12 +61,6 @@ impl Package {
     pub fn serialize(&self) -> [u8; PKG_SIZE] {
         let mut buf = [0u8; PKG_SIZE];
         let mut start: usize = 0;
-
-        let sign_as_bytes = Box::<[u8]>::from(self.sign.clone());
-        let sign_size = size_of_val(&*sign_as_bytes);
-
-        println!("{} {}", self.sender.as_bytes().len(), sign_size);
-        println!("{}", PKG_SIZE);
 
         self.typ.serialize(&mut buf[start..]);
         start += size_of::<PackageType>();

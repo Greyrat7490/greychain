@@ -99,8 +99,6 @@ fn handle_pkg(pkg: Package, blockchain: &Arc<Mutex<Blockchain>>) {
         PackageType::Block => {}
         PackageType::Fork => {}
     }
-
-    println!("{}", pkg);
 }
 
 fn save_blockchain(blockchain: &Blockchain, name: &str) {
