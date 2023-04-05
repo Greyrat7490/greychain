@@ -1,7 +1,7 @@
 use std::{
     net::{TcpStream, SocketAddr, Ipv4Addr, IpAddr, TcpListener},
     thread::{JoinHandle, self},
-    time::Duration, 
+    time::Duration,
     sync::{Arc, Mutex}, fs
 };
 
@@ -25,7 +25,7 @@ pub struct Wallet {
 }
 
 impl Wallet {
-    pub fn new() -> Wallet {     
+    pub fn new() -> Wallet {
         let (pub_key, priv_key) = create_key_pair();
         let blochchain = Arc::new(Mutex::new(Blockchain::new()));
 

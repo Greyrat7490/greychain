@@ -1,6 +1,6 @@
 use std::{
     net::{TcpListener, TcpStream, SocketAddr, Ipv4Addr, IpAddr},
-    io::{Read, Write}, 
+    io::{Read, Write},
     sync::atomic::{AtomicU16, Ordering::Relaxed}
 };
 

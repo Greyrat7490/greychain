@@ -32,7 +32,7 @@ impl Serializer for u64 {
     }
 
     fn deserialize(bytes: &[u8]) -> Self {
-        return unsafe { 
+        return unsafe {
             let ptr = bytes.as_ptr() as *const u64;
             (*ptr).clone()
         };
@@ -46,7 +46,7 @@ impl Serializer for PackageType {
     }
 
     fn deserialize(bytes: &[u8]) -> Self {
-        return unsafe { 
+        return unsafe {
             let ptr = bytes.as_ptr() as *const PackageType;
             (*ptr).clone()
         };
@@ -60,7 +60,7 @@ impl Serializer for usize {
     }
 
     fn deserialize(bytes: &[u8]) -> Self {
-        return unsafe { 
+        return unsafe {
             let ptr = bytes.as_ptr() as *const usize;
             (*ptr).clone()
         };
@@ -74,7 +74,7 @@ impl Serializer for f64 {
     }
 
     fn deserialize(bytes: &[u8]) -> Self {
-        return unsafe { 
+        return unsafe {
             let ptr = bytes.as_ptr() as *const f64;
             (*ptr).clone()
         };

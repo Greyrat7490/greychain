@@ -67,8 +67,7 @@ impl Transaction {
 
 impl Display for Transaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        return write!(f, "id: {}\namount: {} GRY\npayer:\n{}payee:\n{}",
-                      self.id, self.amount, self.payer, &self.payee[..self.payee.len()-1]);
+        return write!(f, "id: {}\namount: {} GRY\npayer:\n{}payee:\n{}", self.id, self.amount, self.payer, &self.payee);
     }
 }
 

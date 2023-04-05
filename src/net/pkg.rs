@@ -12,7 +12,7 @@ use crate::{blockchain::Transaction, crypto::{RSA_BYTES, RSA_PEM_SIZE}};
 use super::serialize::Serializer;
 
 pub const PKG_CONTENT_SIZE: usize = 2000;
-pub const PKG_SIZE: usize = size_of::<PackageType>() + 
+pub const PKG_SIZE: usize = size_of::<PackageType>() +
                             PKG_CONTENT_SIZE +
                             RSA_PEM_SIZE + size_of::<usize>() +
                             RSA_BYTES + size_of::<usize>();
@@ -47,7 +47,7 @@ impl Package {
         start += size_of::<PackageType>();
 
         let mut content = [0u8; PKG_CONTENT_SIZE];
-        content.copy_from_slice(&bytes[start..start+PKG_CONTENT_SIZE]); 
+        content.copy_from_slice(&bytes[start..start+PKG_CONTENT_SIZE]);
         start += PKG_CONTENT_SIZE;
 
         let sender = String::deserialize(&bytes[start..]);

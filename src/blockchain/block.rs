@@ -30,12 +30,12 @@ impl Block {
 
 impl Display for Block {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        return write!(f, "{}\nhash: {} (prev)\nround: {}\ntimestamp: {}\n{}\nhash: {} (cur)\n{}\n",
-                      "==========================", 
+        return write!(f, "{}\nhash: {} (prev)\nround: {}\ntimestamp: {}\n{}hash: {} (cur)\n{}\n",
+                      "==========================",
                       self.prev_hash,
                       self.round,
                       self.timestamp,
-                      self.transaction, 
+                      self.transaction,
                       self.hash,
                       "==========================");
     }
