@@ -27,13 +27,27 @@ impl Serializer for String {
 
 impl Serializer for u64 {
     fn serialize(&self, dst: &mut [u8]) {
-        const SIZE: usize = size_of::<usize>();
+        const SIZE: usize = size_of::<u64>();
         dst[..SIZE].copy_from_slice(unsafe { &transmute::<u64, [u8; SIZE]>(*self) });
     }
 
     fn deserialize(bytes: &[u8]) -> Self {
         return unsafe {
             let ptr = bytes.as_ptr() as *const u64;
+            (*ptr).clone()
+        };
+    }
+}
+
+impl Serializer for u16 {
+    fn serialize(&self, dst: &mut [u8]) {
+        const SIZE: usize = size_of::<u16>();
+        dst[..SIZE].copy_from_slice(unsafe { &transmute::<u16, [u8; SIZE]>(*self) });
+    }
+
+    fn deserialize(bytes: &[u8]) -> Self {
+        return unsafe {
+            let ptr = bytes.as_ptr() as *const u16;
             (*ptr).clone()
         };
     }
@@ -69,7 +83,7 @@ impl Serializer for usize {
 
 impl Serializer for f64 {
     fn serialize(&self, dst: &mut [u8]) {
-        const SIZE: usize = size_of::<usize>();
+        const SIZE: usize = size_of::<f64>();
         dst[..SIZE].copy_from_slice(unsafe { &transmute::<f64, [u8; SIZE]>(*self) });
     }
 
