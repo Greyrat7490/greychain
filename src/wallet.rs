@@ -6,11 +6,16 @@ use std::{
 };
 
 use crate::{
-    net::{tcp::init_receiver, tcp::recv, tcp::send, pkg::{Package, PackageType}},
-    blockchain::{Blockchain, Transaction, Block}, crypto::create_key_pair
+    net::{
+        tcp::{init_receiver, recv, send},
+        pkg::{Package, PackageType, deserialize_status, deserialize_nodes},
+        network::Network
+    },
+    blockchain::{Blockchain, Transaction, Block},
+    crypto::create_key_pair
 };
 
-use rsa::{RsaPrivateKey, RsaPublicKey, sha2::Sha256, pss::BlindedSigningKey};
+use rsa::{RsaPrivateKey, RsaPublicKey, sha2::Sha256, pss::BlindedSigningKey, pkcs8::EncodePublicKey};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const BLOCKCHAINS_DIR: &str = "blockchains";
@@ -22,20 +27,26 @@ pub struct Wallet {
     pub pub_key: RsaPublicKey,
     priv_key: RsaPrivateKey,
     blochchain: Arc<Mutex<Blockchain>>,
+    network: Arc<Mutex<Network>>
 }
 
 impl Wallet {
     pub fn new() -> Wallet {
         let (pub_key, priv_key) = create_key_pair();
+        let pub_key_pem = pub_key.to_public_key_pem(rsa::pkcs8::LineEnding::LF).unwrap();
+        let sign_key = BlindedSigningKey::<Sha256>::from(priv_key.clone());
+
         let blochchain = Arc::new(Mutex::new(Blockchain::new()));
 
         let online = Arc::new(Mutex::new(true));
         let (port, listener) = init_receiver().expect("ERROR: could not create socket");
 
-        let recv_thread = recv_loop(Arc::clone(&online), listener, Arc::clone(&blochchain));
+        let network = Arc::new(Mutex::new(Network::new()));
+        let recv_thread = recv_loop(pub_key_pem.clone(), sign_key.clone(), Arc::clone(&online), listener, Arc::clone(&blochchain), Arc::clone(&network));
+        network.lock().unwrap().go_online(pub_key_pem, port, sign_key);
 
         println!("created new wallet at port {}", port);
-        return Wallet{ port, online, recv_thread, priv_key, pub_key, blochchain };
+        return Wallet{ port, online, recv_thread, priv_key, pub_key, blochchain, network };
     }
 
     pub fn send_tx(&self, port: u16, payee: &RsaPublicKey, amount: f64) -> bool {
@@ -56,6 +67,10 @@ impl Wallet {
     }
 
     pub fn shutdown(self) {
+        let pub_key_pem = self.pub_key.to_public_key_pem(rsa::pkcs8::LineEnding::LF).unwrap();
+        let sign_key = BlindedSigningKey::<Sha256>::from(self.priv_key.clone());
+
+        self.network.lock().unwrap().go_offline(pub_key_pem, self.port, sign_key);
         *self.online.lock().unwrap() = false;
         self.recv_thread.join().unwrap();
 
@@ -68,12 +83,23 @@ impl Wallet {
         save_blockchain(&self.blochchain.lock().unwrap(), &self.get_name());
     }
 
+    pub fn show_network(&self) {
+        println!("------- {} network -------\n{}", self.get_name(), self.network.lock().unwrap());
+    }
+
     pub fn get_name(&self) -> String {
         return format!("wallet{}", self.port);
     }
 }
 
-fn recv_loop(online: Arc<Mutex<bool>>, listener: TcpListener, blockchain: Arc<Mutex<Blockchain>>) -> JoinHandle<()> {
+impl PartialEq for Wallet {
+    fn eq(&self, other: &Self) -> bool {
+        return self.pub_key == other.pub_key;
+    }
+}
+
+fn recv_loop(pub_key: String, sign_key: BlindedSigningKey::<Sha256>, online: Arc<Mutex<bool>>,
+             listener: TcpListener, blockchain: Arc<Mutex<Blockchain>>, network: Arc<Mutex<Network>>) -> JoinHandle<()> {
     return thread::spawn(move || {
         // TODO: better spin lock?
         while *online.lock().unwrap() {
@@ -82,13 +108,13 @@ fn recv_loop(online: Arc<Mutex<bool>>, listener: TcpListener, blockchain: Arc<Mu
             if let Ok((stream, _)) = stream {
                 let pkg = recv(stream);
                 println!("received pkg type: {:?}", pkg.typ);
-                handle_pkg(pkg, &blockchain);
+                handle_pkg(&pub_key, &sign_key, pkg, &blockchain, &network);
             }
         }
     });
 }
 
-fn handle_pkg(pkg: Package, blockchain: &Arc<Mutex<Blockchain>>) {
+fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Package, blockchain: &Arc<Mutex<Blockchain>>, network: &Arc<Mutex<Network>>) {
     match pkg.typ {
         PackageType::Tx => {
             let tx = Transaction::deserialize(pkg.content);
@@ -97,8 +123,39 @@ fn handle_pkg(pkg: Package, blockchain: &Arc<Mutex<Blockchain>>) {
             let block = Block::new(tx, blockchain.cur_hash, blockchain.get_round());
             blockchain.add_block(block);
         }
-        PackageType::Block => {}
-        PackageType::Fork => {}
+        PackageType::Status => {
+            let (go_online, node) = deserialize_status(pkg.content);
+
+            let network = &mut network.lock().unwrap();
+            if go_online {
+                network.register(node.pub_key.clone(), node.port);
+
+                let nodes_pkg = Package::new_nodes(&pub_key, network.get_nodes_except(node.pub_key), &sign_key);
+
+                let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), node.port);
+                let client = TcpStream::connect_timeout(&addr, TIMEOUT);
+
+                if let Ok(stream) = client {
+                    send(stream, nodes_pkg);
+                } else {
+                    println!("could not properly connect to server");
+                }
+            } else {
+                network.deregister(node.pub_key);
+            }
+        }
+        PackageType::Nodes => {
+            let nodes = deserialize_nodes(pkg.content);
+
+            println!("Nodes pkg: {}", pkg);
+
+            let network = &mut network.lock().unwrap();
+            for node in nodes {
+                network.register(node.pub_key, node.port);
+            }
+        }
+        PackageType::Block => { todo!() }
+        PackageType::Fork => { todo!() }
     }
 }
 

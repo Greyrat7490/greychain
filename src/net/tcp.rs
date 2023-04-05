@@ -21,6 +21,7 @@ pub fn init_receiver() -> Option<(u16, TcpListener)> {
     return Some((port, listener));
 }
 
+// TODO to Option
 pub fn recv(mut stream: TcpStream) -> Package {
     let mut buf = [0; PKG_SIZE];
     stream.read_exact(&mut buf).unwrap();
