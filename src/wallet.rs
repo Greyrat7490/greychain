@@ -134,7 +134,10 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
 
             let network = &mut network.lock().unwrap();
             if go_online {
-                network.register(node.pub_key.clone(), node.port);
+                if network.is_new(&node.pub_key) {
+                    network.broadcast(pkg);
+                    network.register(node.pub_key.clone(), node.port);
+                }
 
                 let nodes_pkg = Package::new_nodes(&pub_key, network.get_nodes_except(&node.pub_key), &sign_key);
 

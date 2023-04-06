@@ -61,6 +61,10 @@ impl Network {
         }
     }
 
+    pub fn is_new(&mut self, pub_key: &String) -> bool {
+        return self.nodes.get(pub_key) == None;
+    }
+
     pub fn deregister(&mut self, pub_key: String) {
         if let Some(port) = self.nodes.remove(&pub_key) {
             println!("deregistered wallet{}", port);
