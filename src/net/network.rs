@@ -77,7 +77,7 @@ impl Network {
             if let Ok(stream) = stream {
                 send(stream, pkg.clone());
             } else {
-                println!("could not properly connect to other node");
+                println!("could not properly connect with {}", addr);
             }
         }
     }
@@ -88,6 +88,10 @@ impl Network {
         } else {
             return 0;
         }
+    }
+
+    pub fn get_len(&self) -> usize {
+        return self.nodes.len();
     }
 }
 

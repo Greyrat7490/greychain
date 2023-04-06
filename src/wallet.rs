@@ -93,6 +93,10 @@ impl Wallet {
         println!("------- {} network -------\n{}", self.get_name(), self.network.lock().unwrap());
     }
 
+    pub fn get_network_len(&self) -> usize {
+        return self.network.lock().unwrap().get_len();
+    }
+
     pub fn get_name(&self) -> String {
         return format!("wallet{}", self.port);
     }

@@ -11,7 +11,7 @@ use crate::{blockchain::Transaction, crypto::{RSA_BYTES, RSA_PEM_SIZE}};
 
 use super::{serialize::Serializer, network::Node};
 
-pub const PKG_CONTENT_SIZE: usize = 2000;
+pub const PKG_CONTENT_SIZE: usize = 9000;                   // TODO: smaller
 pub const PKG_SIZE: usize = size_of::<PackageType>() +
                             PKG_CONTENT_SIZE +
                             RSA_PEM_SIZE + size_of::<usize>() +
