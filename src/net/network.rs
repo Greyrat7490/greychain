@@ -71,11 +71,11 @@ impl Network {
         }
     }
 
-    pub fn get_nodes_except(&self, pub_key: &String) -> Vec<Node>{
+    pub fn get_nodes_except(&self, except_key: &String) -> Vec<Node>{
         let mut nodes = Vec::<Node>::with_capacity(self.nodes.len());
 
-        for (key, port) in &self.nodes {
-            if key != pub_key {
+        for (pub_key, port) in &self.nodes {
+            if pub_key != except_key {
                 nodes.push(Node { pub_key: pub_key.clone(), port: *port });
             }
         }
