@@ -1,20 +1,10 @@
-use std::{net::{TcpStream, SocketAddr, IpAddr, Ipv4Addr}, time::Duration, collections::HashMap, sync::Once, fmt::Display};
+use std::{net::{TcpStream, SocketAddr, IpAddr, Ipv4Addr}, time::Duration, collections::HashMap, fmt::Display};
 
 use rsa::{pss::BlindedSigningKey, sha2::Sha256};
 
 use super::{pkg::Package, tcp::send};
 
 const TIMEOUT: Duration = Duration::from_secs(1);
-
-
-static mut MASTER_NODES: Option<Vec<Node>> = None;
-static INIT_MASTER_NODES: Once = Once::new();
-
-pub fn init_master_nodes(nodes: Vec<Node>) {
-    INIT_MASTER_NODES.call_once(|| {
-        unsafe { MASTER_NODES = Some(nodes) };
-    });
-}
 
 pub struct Node {
     pub pub_key: String,
@@ -32,14 +22,10 @@ pub struct Network {
 }
 
 impl Network {
-    pub fn new() -> Network {
+    pub fn new(master_nodes: &Vec<Node>) -> Network {
         let mut nodes = HashMap::<String, u16>::new();
-        unsafe {
-            if let Some(master_nodes) = &MASTER_NODES {
-                for node in master_nodes {
-                    nodes.insert(node.pub_key.to_string(), node.port);
-                }
-            }
+        for node in master_nodes {
+            nodes.insert(node.pub_key.to_string(), node.port);
         }
 
         return Network{ nodes };

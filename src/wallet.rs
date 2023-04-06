@@ -9,7 +9,7 @@ use crate::{
     net::{
         tcp::{init_receiver, recv, send},
         pkg::{Package, PackageType, deserialize_status, deserialize_nodes},
-        network::Network
+        network::{Network, Node}
     },
     blockchain::{Blockchain, Transaction, Block},
     crypto::create_key_pair
@@ -35,7 +35,7 @@ pub struct Wallet {
 }
 
 impl Wallet {
-    pub fn new() -> Wallet {
+    pub fn new(master_nodes: &Vec<Node>) -> Wallet {
         let (pub_key, priv_key) = create_key_pair();
         let pub_key_pem = pub_key.to_public_key_pem(rsa::pkcs8::LineEnding::LF).unwrap();
         let sign_key = BlindedSigningKey::<Sha256>::from(priv_key.clone());
@@ -45,7 +45,7 @@ impl Wallet {
         let online = Arc::new(Mutex::new(true));
         let (port, listener) = init_receiver().expect("ERROR: could not create socket");
 
-        let network = Arc::new(Mutex::new(Network::new()));
+        let network = Arc::new(Mutex::new(Network::new(&master_nodes)));
         let recv_thread = recv_loop(pub_key_pem.clone(), sign_key.clone(), Arc::clone(&online), listener, Arc::clone(&blochchain), Arc::clone(&network));
         network.lock().unwrap().go_online(pub_key_pem.clone(), port, sign_key.clone());
 
