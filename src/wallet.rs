@@ -22,11 +22,15 @@ const BLOCKCHAINS_DIR: &str = "blockchains";
 
 pub struct Wallet {
     pub port: u16,
+
+    pub pub_key_pem: String,
+    pub_key: RsaPublicKey,
+    priv_key: RsaPrivateKey,
+    sign_key: BlindedSigningKey<Sha256>,
+
+    blochchain: Arc<Mutex<Blockchain>>,
     online: Arc<Mutex<bool>>,
     recv_thread: JoinHandle<()>,
-    pub pub_key: RsaPublicKey,
-    priv_key: RsaPrivateKey,
-    blochchain: Arc<Mutex<Blockchain>>,
     network: Arc<Mutex<Network>>
 }
 
@@ -43,22 +47,24 @@ impl Wallet {
 
         let network = Arc::new(Mutex::new(Network::new()));
         let recv_thread = recv_loop(pub_key_pem.clone(), sign_key.clone(), Arc::clone(&online), listener, Arc::clone(&blochchain), Arc::clone(&network));
-        network.lock().unwrap().go_online(pub_key_pem, port, sign_key);
+        network.lock().unwrap().go_online(pub_key_pem.clone(), port, sign_key.clone());
 
         println!("created new wallet at port {}", port);
-        return Wallet{ port, online, recv_thread, priv_key, pub_key, blochchain, network };
+        return Wallet{ port, online, recv_thread, priv_key, pub_key, blochchain, network, pub_key_pem, sign_key };
     }
 
-    pub fn send_tx(&self, port: u16, payee: &RsaPublicKey, amount: f64) -> bool {
+    pub fn send_tx(&self, payee: &String, amount: f64) -> bool {
+        let port = self.network.lock().unwrap().get_port(payee);
+        if port == 0 {
+            return false;
+        }
+        
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
         let client = TcpStream::connect_timeout(&addr, TIMEOUT);
 
         if let Ok(stream) = client {
-            let tx = Transaction::new(&self.pub_key, payee, amount);
-            let sign_key = BlindedSigningKey::<Sha256>::from(self.priv_key.clone());
-
-            send(stream, Package::new_tx(tx, sign_key));
-
+            let tx = Transaction::new(&self.pub_key_pem, payee, amount);
+            send(stream, Package::new_tx(tx, self.sign_key.clone()));
             return true;
         } else {
             println!("could not properly connect to server");
@@ -130,7 +136,7 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
             if go_online {
                 network.register(node.pub_key.clone(), node.port);
 
-                let nodes_pkg = Package::new_nodes(&pub_key, network.get_nodes_except(node.pub_key), &sign_key);
+                let nodes_pkg = Package::new_nodes(&pub_key, network.get_nodes_except(&node.pub_key), &sign_key);
 
                 let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), node.port);
                 let client = TcpStream::connect_timeout(&addr, TIMEOUT);

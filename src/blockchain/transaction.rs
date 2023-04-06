@@ -1,10 +1,5 @@
 use std::{fmt::Display, mem::size_of, sync::atomic::AtomicU64, hash::Hash};
 
-use rsa::{
-    RsaPublicKey,
-    pkcs8::EncodePublicKey
-};
-
 use crate::net::{pkg::PKG_CONTENT_SIZE, serialize::Serializer};
 
 #[derive(Clone)]
@@ -21,10 +16,8 @@ fn get_next_id() -> u64 {
 }
 
 impl Transaction {
-    pub fn new(payer: &RsaPublicKey, payee: &RsaPublicKey, amount: f64) -> Transaction {
+    pub fn new(payer: &String, payee: &String, amount: f64) -> Transaction {
         let id = get_next_id();
-        let payer = payer.to_public_key_pem(rsa::pkcs8::LineEnding::LF).unwrap();
-        let payee = payee.to_public_key_pem(rsa::pkcs8::LineEnding::LF).unwrap();
 
         return Transaction { id, payer: payer.to_owned(), payee: payee.to_owned(), amount };
     }

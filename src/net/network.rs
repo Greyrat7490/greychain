@@ -56,8 +56,9 @@ impl Network {
     }
 
     pub fn register(&mut self, pub_key: String, port: u16) {
-        self.nodes.insert(pub_key, port);
-        println!("registered wallet{}", port);
+        if self.nodes.insert(pub_key, port) == None {
+            println!("registered wallet{}", port);
+        }
     }
 
     pub fn deregister(&mut self, pub_key: String) {
@@ -66,11 +67,11 @@ impl Network {
         }
     }
 
-    pub fn get_nodes_except(&self, pub_key: String) -> Vec<Node>{
+    pub fn get_nodes_except(&self, pub_key: &String) -> Vec<Node>{
         let mut nodes = Vec::<Node>::with_capacity(self.nodes.len());
 
         for (key, port) in &self.nodes {
-            if *key != pub_key {
+            if key != pub_key {
                 nodes.push(Node { pub_key: pub_key.clone(), port: *port });
             }
         }
@@ -88,6 +89,14 @@ impl Network {
             } else {
                 println!("could not properly connect to other node");
             }
+        }
+    }
+
+    pub fn get_port(&self, pub_key: &String) -> u16 {
+        if let Some(port) = self.nodes.get(pub_key) {
+            return *port;
+        } else {
+            return 0;
         }
     }
 }
