@@ -8,8 +8,8 @@ use std::{
 use crate::{
     net::{
         tcp::{init_receiver, recv, send},
-        pkg::{Package, PackageType, deserialize_status, deserialize_nodes},
-        network::{Network, Node}, serialize::Serializer
+        pkg::{Package, PackageType},
+        network::Network, serialize::Serializer, node::Node
     },
     blockchain::{Blockchain, Transaction, Block},
     crypto::create_key_pair
@@ -45,9 +45,9 @@ impl Wallet {
         let online = Arc::new(Mutex::new(true));
         let (port, listener) = init_receiver().expect("ERROR: could not create socket");
 
-        let network = Arc::new(Mutex::new(Network::new(&master_nodes)));
+        let network = Arc::new(Mutex::new(Network::new(master_nodes)));
         let recv_thread = recv_loop(pub_key_pem.clone(), sign_key.clone(), Arc::clone(&online), listener, Arc::clone(&blochchain), Arc::clone(&network));
-        network.lock().unwrap().go_online(pub_key_pem.clone(), port, sign_key.clone());
+        network.lock().unwrap().update_status(pub_key_pem.clone(), port, true, sign_key.clone());
 
         println!("created new wallet at port {}", port);
         return Wallet{ port, online, recv_thread, priv_key, pub_key, blochchain, network, pub_key_pem, sign_key };
@@ -64,7 +64,8 @@ impl Wallet {
 
         if let Ok(stream) = client {
             let tx = Transaction::new(&self.pub_key_pem, payee, amount);
-            send(stream, Package::new_tx(tx, self.sign_key.clone()));
+            let sender = tx.payer.clone();
+            send(stream, Package::new(tx, PackageType::Tx, sender, self.sign_key.clone()));
             return true;
         } else {
             println!("could not properly connect to server");
@@ -76,7 +77,7 @@ impl Wallet {
         let pub_key_pem = self.pub_key.to_public_key_pem(rsa::pkcs8::LineEnding::LF).unwrap();
         let sign_key = BlindedSigningKey::<Sha256>::from(self.priv_key.clone());
 
-        self.network.lock().unwrap().go_offline(pub_key_pem, self.port, sign_key);
+        self.network.lock().unwrap().update_status(pub_key_pem, self.port, false, sign_key);
         *self.online.lock().unwrap() = false;
         self.recv_thread.join().unwrap();
 
@@ -136,10 +137,10 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
             blockchain.add_block(block);
         }
         PackageType::Status => {
-            let (go_online, node) = deserialize_status(pkg.content);
+            let node = Node::deserialize(&pkg.content).1;
 
             let network = &mut network.lock().unwrap();
-            if go_online {
+            if node.online {
                 let is_forwarded = pkg.is_forwarded;
 
                 if network.contains(&node.pub_key) {
@@ -148,7 +149,8 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
                 }
 
                 if !is_forwarded {
-                    let nodes_pkg = Package::new_nodes(&pub_key, network.get_nodes_except(&node.pub_key), &sign_key);
+                    let nodes = network.get_nodes_except(&node.pub_key);
+                    let nodes_pkg = Package::new(nodes, PackageType::NodesRes, pub_key.to_string(), sign_key.to_owned());
 
                     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), node.port);
                     let client = TcpStream::connect_timeout(&addr, TIMEOUT);
@@ -164,9 +166,7 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
             }
         }
         PackageType::NodesRes => {
-            let nodes = deserialize_nodes(pkg.content);
-
-            println!("NodesRes pkg: {}", pkg);
+            let nodes = Vec::<Node>::deserialize(&pkg.content).1;
 
             let network = &mut network.lock().unwrap();
             for node in nodes {

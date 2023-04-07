@@ -5,8 +5,9 @@ mod crypto;
 
 use std::{time::Duration, thread::sleep};
 
-use net::{network::Node, tcp::get_pkgs_send};
 use wallet::Wallet;
+
+use crate::net::{tcp::get_pkgs_send, node::Node};
 
 extern crate rsa;
 extern crate rand;
@@ -15,7 +16,7 @@ extern crate digest;
 fn main() {
     let wallet1 = Wallet::new(&vec![]);
 
-    let master_nodes = vec![Node{ pub_key: wallet1.pub_key_pem.clone(), port: wallet1.port}];
+    let master_nodes = vec![Node{ pub_key: wallet1.pub_key_pem.clone(), port: wallet1.port, online: true}];
 
     let wallet2 = Wallet::new(&master_nodes);
     let wallet3 = Wallet::new(&master_nodes);
@@ -50,7 +51,7 @@ fn main() {
 mod tests {
     use std::{time::Duration, thread::sleep};
 
-    use crate::{wallet::Wallet, net::network::Node};
+    use crate::{wallet::Wallet, net::node::Node};
 
     #[test]
     fn network_3wallets() {
@@ -70,7 +71,7 @@ mod tests {
     fn network_with_n_wallets(wallets_count: usize) {
         let wallet1 = Wallet::new(&vec![]);
 
-        let master_nodes = vec![Node{ pub_key: wallet1.pub_key_pem.clone(), port: wallet1.port}];
+        let master_nodes = vec![Node{ pub_key: wallet1.pub_key_pem.clone(), port: wallet1.port, online: true}];
 
         let mut wallets = Vec::<Wallet>::with_capacity(wallets_count-1);
         wallets.resize_with(wallets_count-1, || { Wallet::new(&master_nodes) });

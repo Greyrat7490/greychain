@@ -2,20 +2,9 @@ use std::{net::{TcpStream, SocketAddr, IpAddr, Ipv4Addr}, time::Duration, collec
 
 use rsa::{pss::BlindedSigningKey, sha2::Sha256};
 
-use super::{pkg::Package, tcp::send};
+use super::{pkg::{Package, PackageType}, tcp::send, node::Node};
 
 const TIMEOUT: Duration = Duration::from_secs(1);
-
-pub struct Node {
-    pub pub_key: String,
-    pub port: u16
-}
-
-impl Display for Node {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        return write!(f, "127.0.0.1:{}", self.port);
-    }
-}
 
 pub struct Network {
     nodes: HashMap<String, u16> // TODO: add ip later
@@ -31,20 +20,14 @@ impl Network {
         return Network{ nodes };
     }
 
-    pub fn go_online(&self, pub_key: String, port: u16, sign_key: BlindedSigningKey::<Sha256>) {
-        let pkg = Package::new_status(pub_key, port, true, sign_key);
-        self.broadcast(pkg);
-    }
-
-    pub fn go_offline(&self, pub_key: String, port: u16, sign_key: BlindedSigningKey::<Sha256>) {
-        let pkg = Package::new_status(pub_key, port, false, sign_key);
+    pub fn update_status(&self, pub_key: String, port: u16, go_online: bool, sign_key: BlindedSigningKey::<Sha256>) {
+        let node = Node {pub_key: pub_key.clone(), port, online: go_online};
+        let pkg = Package::new(node, PackageType::Status, pub_key, sign_key);
         self.broadcast(pkg);
     }
 
     pub fn register(&mut self, pub_key: String, port: u16) {
-        if self.nodes.insert(pub_key, port) == None {
-            println!("registered wallet{}", port);
-        }
+        self.nodes.insert(pub_key, port);
     }
 
     pub fn contains(&mut self, pub_key: &String) -> bool {
@@ -52,9 +35,7 @@ impl Network {
     }
 
     pub fn deregister(&mut self, pub_key: String) {
-        if let Some(port) = self.nodes.remove(&pub_key) {
-            println!("deregistered wallet{}", port);
-        }
+        self.nodes.remove(&pub_key);
     }
 
     pub fn get_nodes_except(&self, except_key: &String) -> Vec<Node>{
@@ -62,7 +43,7 @@ impl Network {
 
         for (pub_key, port) in &self.nodes {
             if pub_key != except_key {
-                nodes.push(Node { pub_key: pub_key.clone(), port: *port });
+                nodes.push(Node { pub_key: pub_key.clone(), port: *port, online: true });
             }
         }
 

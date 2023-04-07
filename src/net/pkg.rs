@@ -7,9 +7,9 @@ use rsa::{
     signature::{Verifier, RandomizedSigner}
 };
 
-use crate::{blockchain::{Transaction, Block}, crypto::{RSA_BYTES, RSA_PEM_SIZE}};
+use crate::{blockchain::Transaction, crypto::{RSA_BYTES, RSA_PEM_SIZE}};
 
-use super::{serialize::Serializer, network::Node};
+use super::{serialize::Serializer, node::Node};
 
 pub const PKG_CONTENT_SIZE: usize = 9000;                   // TODO: smaller
 pub const PKG_SIZE: usize = size_of::<PackageType>() +
@@ -24,10 +24,6 @@ pub enum PackageType {
     Tx, Status, NodesRes, Block, Fork
 }
 
-const NODE_SIZE: usize = RSA_PEM_SIZE + size_of::<usize>() + size_of::<u16>();
-const NODE_LIST_MAX_LEN: usize = (PKG_CONTENT_SIZE - size_of::<u8>()) / NODE_SIZE;
-
-// TODO: as trait
 #[derive(Clone)]
 pub struct Package {
     pub typ: PackageType,
@@ -38,51 +34,15 @@ pub struct Package {
 }
 
 impl Package {
-    pub fn new_tx(tx: Transaction, sign_key: BlindedSigningKey<Sha256>) -> Package {
-        let mut content = [0u8; PKG_CONTENT_SIZE];
-        tx.serialize(&mut content);
+    pub fn new<T: Serializer>(content: T, typ: PackageType, pub_key: String,
+                              sign_key: BlindedSigningKey<Sha256>) -> Package {
+        let mut content_bytes = [0u8; PKG_CONTENT_SIZE];
+        content.serialize(&mut content_bytes);
 
         let mut rng = rand::thread_rng();
-        let sign = sign_key.sign_with_rng(&mut rng, &content);
+        let sign = sign_key.sign_with_rng(&mut rng, &content_bytes);
 
-        return Package{ typ: PackageType::Tx, content, sender: tx.payer, sign, is_forwarded: false };
-    }
-
-    pub fn new_status(pub_key: String, port: u16, go_online: bool, sign_key: BlindedSigningKey<Sha256>) -> Package {
-        let mut content = [0u8; PKG_CONTENT_SIZE];
-        let mut start: usize = 0;
-
-        start += (go_online as u8).serialize(&mut content[start..]);
-        start += pub_key.serialize(&mut content[start..]);
-        port.serialize(&mut content[start..]);
-
-        let mut rng = rand::thread_rng();
-        let sign = sign_key.sign_with_rng(&mut rng, &content);
-
-        return Package { typ: PackageType::Status, content, sender: pub_key, sign, is_forwarded: false }
-    }
-
-    pub fn new_nodes(sender: &String, nodes: Vec<Node>, sign_key: &BlindedSigningKey<Sha256>) -> Package {
-        assert!(nodes.len() <= NODE_LIST_MAX_LEN);
-
-        let mut content = [0u8; PKG_CONTENT_SIZE];
-        let mut start: usize = 0;
-
-        content[start] = nodes.len() as u8;
-        start += size_of::<u8>();
-
-        for node in nodes {
-            node.pub_key.serialize(&mut content[start..]);
-            start += node.pub_key.len() + size_of::<usize>();
-
-            node.port.serialize(&mut content[start..]);
-            start += size_of::<u16>();
-        }
-
-        let mut rng = rand::thread_rng();
-        let sign = sign_key.sign_with_rng(&mut rng, &content);
-
-        return Package { typ: PackageType::NodesRes, content, sender: sender.to_string(), sign, is_forwarded: false }
+        return Package{ typ, content: content_bytes, sender: pub_key, sign, is_forwarded: false };
     }
 
     pub fn deserialize(bytes: [u8; PKG_SIZE]) -> Self {
@@ -134,40 +94,6 @@ impl Package {
     }
 }
 
-pub fn deserialize_status(bytes: [u8; PKG_CONTENT_SIZE]) -> (bool, Node) {
-    let mut start = 0;
-
-    let (size, status) = bool::deserialize(&bytes[start..]);
-    start += size;
-
-    let (size, pub_key) = String::deserialize(&bytes[start..]);
-    start += size;
-
-    let port = u16::deserialize(&bytes[start..]).1;
-
-    return (status, Node { pub_key, port });
-}
-
-pub fn deserialize_nodes(bytes: [u8; PKG_CONTENT_SIZE]) -> Vec<Node> {
-    let mut start = 0;
-    let mut nodes = Vec::<Node>::new();
-
-    let len = bytes[0];
-    start += 1;
-
-    for _ in 0..len {
-        let (size, pub_key) = String::deserialize(&bytes[start..]);
-        start += size;
-
-        let (size, port) = u16::deserialize(&bytes[start..]);
-        start += size;
-
-        nodes.push(Node { pub_key, port })
-    }
-
-    return nodes;
-}
-
 impl Display for Package {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let content_str = match self.typ {
@@ -184,17 +110,13 @@ impl Display for Package {
             }
 
             PackageType::NodesRes => {
-                let nodes = deserialize_nodes(self.content);
-                if nodes.len() == 0 {
-                    "empty\n".to_string()
-                } else {
-                    nodes.iter().map(|node| node.to_string() + "\n").collect::<String>()
-                }
+                let nodes = Vec::<Node>::deserialize(&self.content).1;
+                nodes.iter().map(|node| node.to_string() + "\n").collect::<String>()
             }
 
             PackageType::Status => {
-                let (status, node) = deserialize_status(self.content);
-                if status {
+                let node = Node::deserialize(&self.content).1;
+                if node.online {
                     "Register wallet:\n".to_string() + &node.pub_key
                 } else {
                     "Deregister wallet:\n".to_string() + &node.pub_key
