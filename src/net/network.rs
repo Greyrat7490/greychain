@@ -47,7 +47,7 @@ impl Network {
         }
     }
 
-    pub fn is_new(&mut self, pub_key: &String) -> bool {
+    pub fn contains(&mut self, pub_key: &String) -> bool {
         return self.nodes.get(pub_key) == None;
     }
 
@@ -76,6 +76,21 @@ impl Network {
 
             if let Ok(stream) = stream {
                 send(stream, pkg.clone());
+            } else {
+                println!("could not properly connect with {}", addr);
+            }
+        }
+    }
+
+    pub fn broadcast_forward(&self, pkg: Package) {
+        for (_, port) in &self.nodes {
+            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), *port);
+            let stream = TcpStream::connect_timeout(&addr, TIMEOUT);
+
+            if let Ok(stream) = stream {
+                let mut forwarded_pkg = pkg.clone();
+                forwarded_pkg.is_forwarded = true;
+                send(stream, forwarded_pkg);
             } else {
                 println!("could not properly connect with {}", addr);
             }

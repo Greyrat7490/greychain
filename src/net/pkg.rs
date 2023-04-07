@@ -1,4 +1,4 @@
-use std::{mem::size_of, fmt::Display};
+use std::{mem::{size_of, size_of_val}, fmt::Display};
 
 use rsa::{
     pss::{Signature, VerifyingKey, BlindedSigningKey},
@@ -15,12 +15,13 @@ pub const PKG_CONTENT_SIZE: usize = 9000;                   // TODO: smaller
 pub const PKG_SIZE: usize = size_of::<PackageType>() +
                             PKG_CONTENT_SIZE +
                             RSA_PEM_SIZE + size_of::<usize>() +
-                            RSA_BYTES + size_of::<usize>();
+                            RSA_BYTES + size_of::<usize>() +
+                            size_of::<bool>();
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 pub enum PackageType {
-    Tx, Status, Nodes, Block, Fork
+    Tx, Status, NodesRes, Block, Fork
 }
 
 const NODE_SIZE: usize = RSA_PEM_SIZE + size_of::<usize>() + size_of::<u16>();
@@ -32,7 +33,8 @@ pub struct Package {
     pub typ: PackageType,
     pub content: [u8; PKG_CONTENT_SIZE],
     pub sender: String,
-    sign: Signature
+    sign: Signature,
+    pub is_forwarded: bool
 }
 
 impl Package {
@@ -42,7 +44,7 @@ impl Package {
         let mut rng = rand::thread_rng();
         let sign = sign_key.sign_with_rng(&mut rng, &content);
 
-        return Package{ typ: PackageType::Tx, content, sender: tx.payer, sign };
+        return Package{ typ: PackageType::Tx, content, sender: tx.payer, sign, is_forwarded: false };
     }
 
     pub fn new_status(pub_key: String, port: u16, go_online: bool, sign_key: BlindedSigningKey<Sha256>) -> Package {
@@ -60,7 +62,7 @@ impl Package {
         let mut rng = rand::thread_rng();
         let sign = sign_key.sign_with_rng(&mut rng, &content);
 
-        return Package { typ: PackageType::Status, content, sender: pub_key, sign }
+        return Package { typ: PackageType::Status, content, sender: pub_key, sign, is_forwarded: false }
     }
 
     pub fn new_nodes(sender: &String, nodes: Vec<Node>, sign_key: &BlindedSigningKey<Sha256>) -> Package {
@@ -83,7 +85,7 @@ impl Package {
         let mut rng = rand::thread_rng();
         let sign = sign_key.sign_with_rng(&mut rng, &content);
 
-        return Package { typ: PackageType::Nodes, content, sender: sender.to_string(), sign }
+        return Package { typ: PackageType::NodesRes, content, sender: sender.to_string(), sign, is_forwarded: false }
     }
 
     pub fn deserialize(bytes: [u8; PKG_SIZE]) -> Self {
@@ -100,8 +102,12 @@ impl Package {
         start += sender.len() + size_of::<usize>();
 
         let sign = Signature::deserialize(&bytes[start..]);
+        let sign_as_bytes = Box::<[u8]>::from(sign.clone());
+        start += size_of_val(&*sign_as_bytes) + size_of::<usize>();
 
-        return Package { typ, content, sender, sign };
+        let is_forwarded = bytes[start] != 0;
+
+        return Package { typ, content, sender, sign, is_forwarded };
     }
 
     pub fn serialize(&self) -> [u8; PKG_SIZE] {
@@ -118,6 +124,10 @@ impl Package {
         start += self.sender.len() + size_of::<usize>();
 
         self.sign.serialize(&mut buf[start..]);
+        let sign_as_bytes = Box::<[u8]>::from(self.sign.clone());
+        start += size_of_val(&*sign_as_bytes) + size_of::<usize>();
+
+        self.is_forwarded.serialize(&mut buf[start..]);
 
         return buf;
     }
@@ -185,7 +195,7 @@ impl Display for Package {
                 "FORK PACKAGE CONTENT\n".to_string()
             }
 
-            PackageType::Nodes => {
+            PackageType::NodesRes => {
                 let nodes = deserialize_nodes(self.content);
                 if nodes.len() == 0 {
                     "empty\n".to_string()

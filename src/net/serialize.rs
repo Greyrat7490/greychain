@@ -95,6 +95,20 @@ impl Serializer for f64 {
     }
 }
 
+impl Serializer for bool {
+    fn serialize(&self, dst: &mut [u8]) {
+        const SIZE: usize = size_of::<bool>();
+        dst[..SIZE].copy_from_slice(unsafe { &transmute::<bool, [u8; SIZE]>(*self) });
+    }
+
+    fn deserialize(bytes: &[u8]) -> Self {
+        return unsafe {
+            let ptr = bytes.as_ptr() as *const bool;
+            (*ptr).clone()
+        };
+    }
+}
+
 impl Serializer for Signature {
     fn serialize(&self, dst: &mut [u8]) {
         const SIZE: usize = size_of::<usize>();

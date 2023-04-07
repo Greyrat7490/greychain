@@ -110,6 +110,7 @@ impl PartialEq for Wallet {
 
 fn recv_loop(pub_key: String, sign_key: BlindedSigningKey::<Sha256>, online: Arc<Mutex<bool>>,
              listener: TcpListener, blockchain: Arc<Mutex<Blockchain>>, network: Arc<Mutex<Network>>) -> JoinHandle<()> {
+
     return thread::spawn(move || {
         // TODO: better spin lock?
         while *online.lock().unwrap() {
@@ -124,7 +125,8 @@ fn recv_loop(pub_key: String, sign_key: BlindedSigningKey::<Sha256>, online: Arc
     });
 }
 
-fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Package, blockchain: &Arc<Mutex<Blockchain>>, network: &Arc<Mutex<Network>>) {
+fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Package,
+              blockchain: &Arc<Mutex<Blockchain>>, network: &Arc<Mutex<Network>>) {
     match pkg.typ {
         PackageType::Tx => {
             let tx = Transaction::deserialize(pkg.content);
@@ -138,29 +140,33 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
 
             let network = &mut network.lock().unwrap();
             if go_online {
-                if network.is_new(&node.pub_key) {
-                    network.broadcast(pkg);
+                let is_forwarded = pkg.is_forwarded;
+
+                if network.contains(&node.pub_key) {
+                    network.broadcast_forward(pkg);
                     network.register(node.pub_key.clone(), node.port);
                 }
 
-                let nodes_pkg = Package::new_nodes(&pub_key, network.get_nodes_except(&node.pub_key), &sign_key);
+                if !is_forwarded {
+                    let nodes_pkg = Package::new_nodes(&pub_key, network.get_nodes_except(&node.pub_key), &sign_key);
 
-                let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), node.port);
-                let client = TcpStream::connect_timeout(&addr, TIMEOUT);
+                    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), node.port);
+                    let client = TcpStream::connect_timeout(&addr, TIMEOUT);
 
-                if let Ok(stream) = client {
-                    send(stream, nodes_pkg);
-                } else {
-                    println!("could not properly connect to server");
+                    if let Ok(stream) = client {
+                        send(stream, nodes_pkg);
+                    } else {
+                        println!("could not properly connect to server");
+                    }
                 }
             } else {
                 network.deregister(node.pub_key);
             }
         }
-        PackageType::Nodes => {
+        PackageType::NodesRes => {
             let nodes = deserialize_nodes(pkg.content);
 
-            println!("Nodes pkg: {}", pkg);
+            println!("NodesRes pkg: {}", pkg);
 
             let network = &mut network.lock().unwrap();
             for node in nodes {

@@ -3,7 +3,9 @@ mod net;
 mod blockchain;
 mod crypto;
 
-use net::network::Node;
+use std::{time::Duration, thread::sleep};
+
+use net::{network::Node, tcp::get_pkgs_send};
 use wallet::Wallet;
 
 extern crate rsa;
@@ -27,6 +29,8 @@ fn main() {
     wallet3.send_tx(&wallet1.pub_key_pem, 64.420);
     wallet3.send_tx(&wallet2.pub_key_pem, 64.420);
 
+    sleep(Duration::from_millis(80));
+
     wallet1.show_network();
     wallet2.show_network();
     wallet3.show_network();
@@ -34,6 +38,12 @@ fn main() {
     wallet1.shutdown();
     wallet2.shutdown();
     wallet3.shutdown();
+
+    println!("pkgs total send: {}", get_pkgs_send()); 
+    // 17  -> 15 (with 3 wallets),  9 (tx and shutdown)
+    // 34  -> 26 (with 4 wallets), 10 (tx and shutdown)
+    // 64  -> 44 (with 5 wallets), 11 (tx and shutdown)
+    // 108 -> 71 (with 6 wallets), 12 (tx and shutdown)
 }
 
 #[cfg(test)]

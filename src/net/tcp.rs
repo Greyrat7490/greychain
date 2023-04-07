@@ -1,10 +1,20 @@
 use std::{
     net::{TcpListener, TcpStream, SocketAddr, Ipv4Addr, IpAddr},
     io::{Read, Write},
-    sync::atomic::{AtomicU16, Ordering::Relaxed}
+    sync::atomic::{AtomicU16, Ordering::Relaxed, AtomicUsize}
 };
 
 use super::pkg::{Package, PKG_SIZE};
+
+static SEND_PKGS: AtomicUsize = AtomicUsize::new(0);
+
+pub fn get_pkgs_send() -> usize {
+    return SEND_PKGS.load(Relaxed);
+}
+
+pub fn inc_pkgs_send() -> usize {
+    return SEND_PKGS.fetch_add(1, Relaxed);
+}
 
 fn get_next_port() -> u16 {
     static NEXT_PORT: AtomicU16 = AtomicU16::new(6969);
@@ -35,5 +45,6 @@ pub fn recv(mut stream: TcpStream) -> Package {
 }
 
 pub fn send(mut stream: TcpStream, pkg: Package) {
+    inc_pkgs_send();
     stream.write(&pkg.serialize()).unwrap();
 }
