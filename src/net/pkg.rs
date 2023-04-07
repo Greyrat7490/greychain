@@ -1,4 +1,4 @@
-use std::{mem::{size_of, size_of_val}, fmt::Display};
+use std::{mem::size_of, fmt::Display};
 
 use rsa::{
     pss::{Signature, VerifyingKey, BlindedSigningKey},
@@ -7,7 +7,7 @@ use rsa::{
     signature::{Verifier, RandomizedSigner}
 };
 
-use crate::{blockchain::Transaction, crypto::{RSA_BYTES, RSA_PEM_SIZE}};
+use crate::{blockchain::{Transaction, Block}, crypto::{RSA_BYTES, RSA_PEM_SIZE}};
 
 use super::{serialize::Serializer, network::Node};
 
@@ -39,7 +39,8 @@ pub struct Package {
 
 impl Package {
     pub fn new_tx(tx: Transaction, sign_key: BlindedSigningKey<Sha256>) -> Package {
-        let content = tx.serialize();
+        let mut content = [0u8; PKG_CONTENT_SIZE];
+        tx.serialize(&mut content);
 
         let mut rng = rand::thread_rng();
         let sign = sign_key.sign_with_rng(&mut rng, &content);
@@ -51,12 +52,8 @@ impl Package {
         let mut content = [0u8; PKG_CONTENT_SIZE];
         let mut start: usize = 0;
 
-        content[start] = go_online as u8;
-        start += size_of::<u8>();
-
-        pub_key.serialize(&mut content[start..]);
-        start += pub_key.len() + size_of::<usize>();
-
+        start += (go_online as u8).serialize(&mut content[start..]);
+        start += pub_key.serialize(&mut content[start..]);
         port.serialize(&mut content[start..]);
 
         let mut rng = rand::thread_rng();
@@ -91,21 +88,20 @@ impl Package {
     pub fn deserialize(bytes: [u8; PKG_SIZE]) -> Self {
         let mut start: usize = 0;
 
-        let typ = PackageType::deserialize(&bytes[start..]);
-        start += size_of::<PackageType>();
+        let (size, typ) = PackageType::deserialize(&bytes[start..]);
+        start += size;
 
         let mut content = [0u8; PKG_CONTENT_SIZE];
         content.copy_from_slice(&bytes[start..start+PKG_CONTENT_SIZE]);
         start += PKG_CONTENT_SIZE;
 
-        let sender = String::deserialize(&bytes[start..]);
-        start += sender.len() + size_of::<usize>();
+        let (size, sender) = String::deserialize(&bytes[start..]);
+        start += size;
 
-        let sign = Signature::deserialize(&bytes[start..]);
-        let sign_as_bytes = Box::<[u8]>::from(sign.clone());
-        start += size_of_val(&*sign_as_bytes) + size_of::<usize>();
+        let (size, sign) = Signature::deserialize(&bytes[start..]);
+        start += size;
 
-        let is_forwarded = bytes[start] != 0;
+        let is_forwarded = bool::deserialize(&bytes[start..]).1;
 
         return Package { typ, content, sender, sign, is_forwarded };
     }
@@ -114,19 +110,11 @@ impl Package {
         let mut buf = [0u8; PKG_SIZE];
         let mut start: usize = 0;
 
-        self.typ.serialize(&mut buf[start..]);
-        start += size_of::<PackageType>();
-
+        start += self.typ.serialize(&mut buf[start..]);
         buf[start..start+PKG_CONTENT_SIZE].copy_from_slice(&self.content);
         start += PKG_CONTENT_SIZE;
-
-        self.sender.serialize(&mut buf[start..]);
-        start += self.sender.len() + size_of::<usize>();
-
-        self.sign.serialize(&mut buf[start..]);
-        let sign_as_bytes = Box::<[u8]>::from(self.sign.clone());
-        start += size_of_val(&*sign_as_bytes) + size_of::<usize>();
-
+        start += self.sender.serialize(&mut buf[start..]);
+        start += self.sign.serialize(&mut buf[start..]); 
         self.is_forwarded.serialize(&mut buf[start..]);
 
         return buf;
@@ -149,13 +137,13 @@ impl Package {
 pub fn deserialize_status(bytes: [u8; PKG_CONTENT_SIZE]) -> (bool, Node) {
     let mut start = 0;
 
-    let status = bytes[0] != 0;
-    start += 1;
+    let (size, status) = bool::deserialize(&bytes[start..]);
+    start += size;
 
-    let pub_key = String::deserialize(&bytes[start..]);
-    start += pub_key.len() + size_of::<usize>();
+    let (size, pub_key) = String::deserialize(&bytes[start..]);
+    start += size;
 
-    let port = u16::deserialize(&bytes[start..]);
+    let port = u16::deserialize(&bytes[start..]).1;
 
     return (status, Node { pub_key, port });
 }
@@ -168,11 +156,11 @@ pub fn deserialize_nodes(bytes: [u8; PKG_CONTENT_SIZE]) -> Vec<Node> {
     start += 1;
 
     for _ in 0..len {
-        let pub_key = String::deserialize(&bytes[start..]);
-        start += pub_key.len() + size_of::<usize>();
+        let (size, pub_key) = String::deserialize(&bytes[start..]);
+        start += size;
 
-        let port = u16::deserialize(&bytes[start..]);
-        start += size_of::<u16>();
+        let (size, port) = u16::deserialize(&bytes[start..]);
+        start += size;
 
         nodes.push(Node { pub_key, port })
     }
@@ -184,7 +172,7 @@ impl Display for Package {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let content_str = match self.typ {
             PackageType::Tx => {
-                Transaction::deserialize(self.content).to_string()
+                Transaction::deserialize(&self.content).1.to_string()
             }
 
             PackageType::Block => {

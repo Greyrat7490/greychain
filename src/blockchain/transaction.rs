@@ -1,6 +1,6 @@
-use std::{fmt::Display, mem::size_of, sync::atomic::AtomicU64, hash::Hash};
+use std::{fmt::Display, sync::atomic::AtomicU64, hash::Hash};
 
-use crate::net::{pkg::PKG_CONTENT_SIZE, serialize::Serializer};
+use crate::net::serialize::Serializer;
 
 #[derive(Clone)]
 pub struct Transaction {
@@ -21,41 +21,6 @@ impl Transaction {
 
         return Transaction { id, payer: payer.to_owned(), payee: payee.to_owned(), amount };
     }
-
-    pub fn deserialize(pkg: [u8; PKG_CONTENT_SIZE]) -> Transaction {
-        let mut start: usize = 0;
-
-        let id = u64::deserialize(&pkg[start..]);
-        start += size_of::<u64>();
-
-        let amount = f64::deserialize(&pkg[start..]);
-        start += size_of::<f64>();
-
-        let payer = String::deserialize(&pkg[start..]);
-        start += payer.len() + size_of::<usize>();
-
-        let payee = String::deserialize(&pkg[start..]);
-
-        return Transaction { id, amount, payer, payee };
-    }
-
-    pub fn serialize(&self) -> [u8; PKG_CONTENT_SIZE] {
-        let mut buf: [u8; PKG_CONTENT_SIZE] = [0; PKG_CONTENT_SIZE];
-        let mut start: usize = 0;
-
-        self.id.serialize(&mut buf[start..]);
-        start += size_of::<u64>();
-
-        self.amount.serialize(&mut buf[start..]);
-        start += size_of::<f64>();
-
-        self.payer.serialize(&mut buf[start..]);
-        start += self.payer.len() + size_of::<usize>();
-
-        self.payee.serialize(&mut buf[start..]);
-
-        return buf;
-    }
 }
 
 impl Display for Transaction {
@@ -70,5 +35,36 @@ impl Hash for Transaction {
         self.amount.to_be_bytes().hash(state);
         self.payer.hash(state);
         self.payee.hash(state);
+    }
+}
+
+impl Serializer for Transaction {
+    fn serialize(&self, dst: &mut [u8]) -> usize {
+        let mut start: usize = 0;
+
+        start += self.id.serialize(&mut dst[start..]);
+        start += self.amount.serialize(&mut dst[start..]);
+        start += self.payer.serialize(&mut dst[start..]); 
+        start += self.payee.serialize(&mut dst[start..]);
+
+        return start;
+    }
+
+    fn deserialize(bytes: &[u8]) -> (usize, Self) {
+        let mut start: usize = 0;
+
+        let (size, id) = u64::deserialize(&bytes[start..]);
+        start += size;
+
+        let (size, amount) = f64::deserialize(&bytes[start..]);
+        start += size;
+
+        let (size, payer) = String::deserialize(&bytes[start..]);
+        start += size;
+
+        let (size, payee) = String::deserialize(&bytes[start..]);
+        start += size;
+
+        return (start, Transaction { id, amount, payer, payee });
     }
 }

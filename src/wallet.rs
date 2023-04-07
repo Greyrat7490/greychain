@@ -9,7 +9,7 @@ use crate::{
     net::{
         tcp::{init_receiver, recv, send},
         pkg::{Package, PackageType, deserialize_status, deserialize_nodes},
-        network::{Network, Node}
+        network::{Network, Node}, serialize::Serializer
     },
     blockchain::{Blockchain, Transaction, Block},
     crypto::create_key_pair
@@ -129,7 +129,7 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
               blockchain: &Arc<Mutex<Blockchain>>, network: &Arc<Mutex<Network>>) {
     match pkg.typ {
         PackageType::Tx => {
-            let tx = Transaction::deserialize(pkg.content);
+            let tx = Transaction::deserialize(&pkg.content).1;
 
             let blockchain = &mut blockchain.lock().unwrap();
             let block = Block::new(tx, blockchain.cur_hash, blockchain.get_round());
