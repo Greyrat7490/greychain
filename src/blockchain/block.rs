@@ -1,5 +1,7 @@
 use std::{fmt::Display, hash::{Hash, Hasher}, collections::hash_map::DefaultHasher, time::{SystemTime, UNIX_EPOCH}};
 
+use crate::net::serialize::Serializer;
+
 use super::Transaction;
 
 pub struct Block {
@@ -38,5 +40,40 @@ impl Display for Block {
                       self.transaction,
                       self.hash,
                       "==========================");
+    }
+}
+
+impl Serializer for Block {
+    fn serialize(&self, dst: &mut [u8]) -> usize {
+        let mut start: usize = 0;
+
+        start += self.prev_hash.serialize(&mut dst[start..]);
+        start += self.round.serialize(&mut dst[start..]);
+        start += self.timestamp.serialize(&mut dst[start..]);
+        start += self.transaction.serialize(&mut dst[start..]);
+        start += self.hash.serialize(&mut dst[start..]);
+
+        return start;
+    }
+
+    fn deserialize(bytes: &[u8]) -> (usize, Self) {
+        let mut start: usize = 0;
+
+        let (size, prev_hash) = u64::deserialize(&bytes[start..]);
+        start += size;
+
+        let (size, round) = usize::deserialize(&bytes[start..]);
+        start += size;
+
+        let (size, timestamp) = u128::deserialize(&bytes[start..]);
+        start += size;
+
+        let (size, transaction) = Transaction::deserialize(&bytes[start..]);
+        start += size;
+
+        let (size, hash) = u64::deserialize(&bytes[start..]);
+        start += size;
+
+        return (start, Block{ prev_hash, round, timestamp, transaction, hash });
     }
 }

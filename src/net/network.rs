@@ -38,16 +38,10 @@ impl Network {
         self.nodes.remove(&pub_key);
     }
 
-    pub fn get_nodes_except(&self, except_key: &String) -> Vec<Node>{
-        let mut nodes = Vec::<Node>::with_capacity(self.nodes.len());
-
-        for (pub_key, port) in &self.nodes {
-            if pub_key != except_key {
-                nodes.push(Node { pub_key: pub_key.clone(), port: *port, online: true });
-            }
-        }
-
-        return nodes;
+    pub fn to_nodes(&self) -> Vec<Node> {
+        return self.nodes.iter()
+            .map(|(pub_key, port)| Node { pub_key: pub_key.clone(), port: *port, online: true })
+            .collect();
     }
 
     pub fn broadcast(&self, pkg: Package) {
@@ -58,7 +52,7 @@ impl Network {
             if let Ok(stream) = stream {
                 send(stream, pkg.clone());
             } else {
-                println!("could not properly connect with {}", addr);
+                println!("could not connect with {}", addr);
             }
         }
     }
@@ -73,7 +67,7 @@ impl Network {
                 forwarded_pkg.is_forwarded = true;
                 send(stream, forwarded_pkg);
             } else {
-                println!("could not properly connect with {}", addr);
+                println!("could not connect with {}", addr);
             }
         }
     }

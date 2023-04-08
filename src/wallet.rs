@@ -53,24 +53,12 @@ impl Wallet {
         return Wallet{ port, online, recv_thread, priv_key, pub_key, blochchain, network, pub_key_pem, sign_key };
     }
 
-    pub fn send_tx(&self, payee: &String, amount: f64) -> bool {
-        let port = self.network.lock().unwrap().get_port(payee);
-        if port == 0 {
-            return false;
-        }
-        
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
-        let client = TcpStream::connect_timeout(&addr, TIMEOUT);
+    pub fn send_tx(&self, payee: &String, amount: f64) {
+        let tx = Transaction::new(&self.pub_key_pem, payee, amount);
+        let sender = tx.payer.clone();
+        let pkg = Package::new(tx, PackageType::Tx, sender, self.sign_key.clone());
 
-        if let Ok(stream) = client {
-            let tx = Transaction::new(&self.pub_key_pem, payee, amount);
-            let sender = tx.payer.clone();
-            send(stream, Package::new(tx, PackageType::Tx, sender, self.sign_key.clone()));
-            return true;
-        } else {
-            println!("could not properly connect to server");
-            return false;
-        }
+        self.network.lock().unwrap().broadcast(pkg);
     }
 
     pub fn shutdown(self) {
@@ -119,7 +107,6 @@ fn recv_loop(pub_key: String, sign_key: BlindedSigningKey::<Sha256>, online: Arc
 
             if let Ok((stream, _)) = stream {
                 let pkg = recv(stream);
-                println!("received pkg type: {:?}", pkg.typ);
                 handle_pkg(&pub_key, &sign_key, pkg, &blockchain, &network);
             }
         }
@@ -132,25 +119,21 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
         PackageType::Tx => {
             let tx = Transaction::deserialize(&pkg.content).1;
 
-            let blockchain = &mut blockchain.lock().unwrap();
+            let blockchain = blockchain.lock().unwrap();
+            // TODO: mining
             let block = Block::new(tx, blockchain.cur_hash, blockchain.get_round());
-            blockchain.add_block(block);
+
+            let pkg = Package::new(block, PackageType::Block, pub_key.to_string(), sign_key.to_owned());
+            network.lock().unwrap().broadcast(pkg)
         }
+
         PackageType::Status => {
             let node = Node::deserialize(&pkg.content).1;
 
             let network = &mut network.lock().unwrap();
             if node.online {
-                let is_forwarded = pkg.is_forwarded;
-
-                if network.contains(&node.pub_key) {
-                    network.broadcast_forward(pkg);
-                    network.register(node.pub_key.clone(), node.port);
-                }
-
-                if !is_forwarded {
-                    let nodes = network.get_nodes_except(&node.pub_key);
-                    let nodes_pkg = Package::new(nodes, PackageType::NodesRes, pub_key.to_string(), sign_key.to_owned());
+                if !pkg.is_forwarded {
+                    let nodes_pkg = Package::new(network.to_nodes(), PackageType::NodesRes, pub_key.to_string(), sign_key.to_owned());
 
                     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), node.port);
                     let client = TcpStream::connect_timeout(&addr, TIMEOUT);
@@ -158,13 +141,19 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
                     if let Ok(stream) = client {
                         send(stream, nodes_pkg);
                     } else {
-                        println!("could not properly connect to server");
+                        println!("could not connect to 127.0.0.1:{}", node.port);
                     }
+                }
+
+                if network.contains(&node.pub_key) {
+                    network.broadcast_forward(pkg);
+                    network.register(node.pub_key.clone(), node.port);
                 }
             } else {
                 network.deregister(node.pub_key);
             }
         }
+
         PackageType::NodesRes => {
             let nodes = Vec::<Node>::deserialize(&pkg.content).1;
 
@@ -173,7 +162,14 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
                 network.register(node.pub_key, node.port);
             }
         }
-        PackageType::Block => { todo!() }
+
+        PackageType::Block => {
+            let block = Block::deserialize(&pkg.content).1;
+
+            let blockchain = &mut blockchain.lock().unwrap();
+            blockchain.add_block(block);
+        }
+
         PackageType::Fork => { todo!() }
     }
 }
