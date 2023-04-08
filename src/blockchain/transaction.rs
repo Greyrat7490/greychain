@@ -4,7 +4,7 @@ use crate::net::serialize::Serializer;
 
 #[derive(Clone)]
 pub struct Transaction {
-    id: u64,
+    pub id: u64,
     amount: f64,
     pub payer: String,
     payee: String,

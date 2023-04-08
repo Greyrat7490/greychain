@@ -21,20 +21,24 @@ fn main() {
     let wallet2 = Wallet::new(&master_nodes);
     let wallet3 = Wallet::new(&master_nodes);
 
+    sleep(Duration::from_millis(100));
+
     wallet1.send_tx(&wallet2.pub_key_pem, 420.69);
     wallet1.send_tx(&wallet3.pub_key_pem, 420.69);
 
     wallet2.send_tx(&wallet1.pub_key_pem, 69.64);
     wallet2.send_tx(&wallet3.pub_key_pem, 69.64);
-
+    
     wallet3.send_tx(&wallet1.pub_key_pem, 64.420);
     wallet3.send_tx(&wallet2.pub_key_pem, 64.420);
-
-    sleep(Duration::from_millis(80));
 
     wallet1.show_network();
     wallet2.show_network();
     wallet3.show_network();
+
+    while !wallet1.is_idling() || !wallet2.is_idling() || !wallet3.is_idling() { 
+        sleep(Duration::from_millis(100));
+    }     
 
     wallet1.shutdown();
     wallet2.shutdown();

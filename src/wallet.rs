@@ -11,7 +11,7 @@ use crate::{
         pkg::{Package, PackageType},
         network::Network, serialize::Serializer, node::Node
     },
-    blockchain::{Blockchain, Transaction, Block},
+    blockchain::{Blockchain, Transaction, Block, Miner},
     crypto::create_key_pair
 };
 
@@ -30,8 +30,9 @@ pub struct Wallet {
 
     blochchain: Arc<Mutex<Blockchain>>,
     online: Arc<Mutex<bool>>,
+    idling: Arc<Mutex<bool>>,
     recv_thread: JoinHandle<()>,
-    network: Arc<Mutex<Network>>
+    network: Arc<Mutex<Network>>,
 }
 
 impl Wallet {
@@ -43,14 +44,23 @@ impl Wallet {
         let blochchain = Arc::new(Mutex::new(Blockchain::new()));
 
         let online = Arc::new(Mutex::new(true));
+        let idling = Arc::new(Mutex::new(false));
         let (port, listener) = init_receiver().expect("ERROR: could not create socket");
 
         let network = Arc::new(Mutex::new(Network::new(master_nodes)));
-        let recv_thread = recv_loop(pub_key_pem.clone(), sign_key.clone(), Arc::clone(&online), listener, Arc::clone(&blochchain), Arc::clone(&network));
+        let recv_thread = recv_loop(
+            pub_key_pem.clone(),
+            sign_key.clone(), 
+            Arc::clone(&online),
+            Arc::clone(&idling),
+            listener,
+            Arc::clone(&blochchain),
+            Arc::clone(&network)
+        );
         network.lock().unwrap().update_status(pub_key_pem.clone(), port, true, sign_key.clone());
 
         println!("created new wallet at port {}", port);
-        return Wallet{ port, online, recv_thread, priv_key, pub_key, blochchain, network, pub_key_pem, sign_key };
+        return Wallet{ port, online, idling, recv_thread, priv_key, pub_key, blochchain, network, pub_key_pem, sign_key };
     }
 
     pub fn send_tx(&self, payee: &String, amount: f64) {
@@ -59,6 +69,10 @@ impl Wallet {
         let pkg = Package::new(tx, PackageType::Tx, sender, self.sign_key.clone());
 
         self.network.lock().unwrap().broadcast(pkg);
+    }
+
+    pub fn is_idling(&self) -> bool {
+        return *self.idling.lock().unwrap();
     }
 
     pub fn shutdown(self) {
@@ -97,34 +111,58 @@ impl PartialEq for Wallet {
     }
 }
 
-fn recv_loop(pub_key: String, sign_key: BlindedSigningKey::<Sha256>, online: Arc<Mutex<bool>>,
-             listener: TcpListener, blockchain: Arc<Mutex<Blockchain>>, network: Arc<Mutex<Network>>) -> JoinHandle<()> {
+fn recv_loop(pub_key: String, sign_key: BlindedSigningKey::<Sha256>, 
+             online: Arc<Mutex<bool>>,
+             idling: Arc<Mutex<bool>>,
+             listener: TcpListener,
+             blockchain: Arc<Mutex<Blockchain>>,
+             network: Arc<Mutex<Network>>) -> JoinHandle<()> {
 
     return thread::spawn(move || {
-        // TODO: better spin lock?
+        let mut miner = Miner::new();
+        let mut later_blocks = Vec::<Block>::new();
+
         while *online.lock().unwrap() {
             let stream = listener.accept();
 
             if let Ok((stream, _)) = stream {
+                *idling.lock().unwrap() = false;
                 let pkg = recv(stream);
-                handle_pkg(&pub_key, &sign_key, pkg, &blockchain, &network);
+                handle_pkg(&pub_key, &sign_key, pkg, &blockchain, &network, &mut miner, &mut later_blocks);
+            } else if miner.is_idling() {
+                *idling.lock().unwrap() = true;
             }
-        }
+
+            if let Some(block) = miner.recv_block() {
+                let pkg = Package::new(block, PackageType::Block, pub_key.to_string(), sign_key.to_owned());
+                handle_pkg(&pub_key, &sign_key, pkg.clone(), &blockchain, &network, &mut miner, &mut later_blocks);
+                network.lock().unwrap().broadcast(pkg);
+            }
+
+            if later_blocks.len() != 0 {
+                let blockchain = &mut blockchain.lock().unwrap();
+                while later_blocks[later_blocks.len()-1].round == blockchain.get_round() {
+                    let block = later_blocks.pop().unwrap();
+                    blockchain.add_block(block);
+                }
+            }
+        } 
+
+        miner.shutdown();
     });
 }
 
 fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Package,
-              blockchain: &Arc<Mutex<Blockchain>>, network: &Arc<Mutex<Network>>) {
+              blockchain: &Arc<Mutex<Blockchain>>,
+              network: &Arc<Mutex<Network>>,
+              miner: &mut Miner,
+              later_blocks: &mut Vec<Block>) {
     match pkg.typ {
         PackageType::Tx => {
             let tx = Transaction::deserialize(&pkg.content).1;
 
             let blockchain = blockchain.lock().unwrap();
-            // TODO: mining
-            let block = Block::new(tx, blockchain.cur_hash, blockchain.get_round());
-
-            let pkg = Package::new(block, PackageType::Block, pub_key.to_string(), sign_key.to_owned());
-            network.lock().unwrap().broadcast(pkg)
+            miner.add_tx(tx, blockchain.cur_hash, blockchain.get_round());
         }
 
         PackageType::Status => {
@@ -133,7 +171,8 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
             let network = &mut network.lock().unwrap();
             if node.online {
                 if !pkg.is_forwarded {
-                    let nodes_pkg = Package::new(network.to_nodes(), PackageType::NodesRes, pub_key.to_string(), sign_key.to_owned());
+                    let nodes_pkg = Package::new(network.to_nodes(), PackageType::NodesRes,
+                        pub_key.to_string(), sign_key.to_owned());
 
                     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), node.port);
                     let client = TcpStream::connect_timeout(&addr, TIMEOUT);
@@ -167,7 +206,17 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
             let block = Block::deserialize(&pkg.content).1;
 
             let blockchain = &mut blockchain.lock().unwrap();
-            blockchain.add_block(block);
+            // block for this round
+            if block.round == blockchain.get_round() {
+                blockchain.add_block(block);
+
+            // block for later
+            } else if block.round > blockchain.get_round() {
+                let round = block.round;
+                later_blocks.push(block);
+                later_blocks.sort_by(|b1, b2| b2.round.cmp(&b1.round) );
+                println!("block for later (round: {})", round);
+            }
         }
 
         PackageType::Fork => { todo!() }

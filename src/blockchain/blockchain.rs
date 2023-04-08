@@ -17,7 +17,10 @@ impl Blockchain {
             self.cur_hash = block.hash;
             self.blocks.push(block);
         } else {
-            println!("could not add block to blockchain (hashes are not matching)");
+            println!("hashes are not matching");
+            println!("prev_hash: {}", self.cur_hash);
+            println!("round: {}", self.get_round());
+            println!("block: {}", block);
         }
     }
 
