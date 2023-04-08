@@ -216,10 +216,22 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
                 later_blocks.push(block);
                 later_blocks.sort_by(|b1, b2| b2.round.cmp(&b1.round) );
                 println!("block for later (round: {})", round);
+
+            // potential fork
+            } else if blockchain.resolve_fork(&block) {
+                let network = &mut network.lock().unwrap();
+                let pkg = Package::new(block, PackageType::Fork, pub_key.to_string(), sign_key.to_owned());
+                network.broadcast(pkg);
             }
         }
 
-        PackageType::Fork => { todo!() }
+        PackageType::Fork => {
+            let block = Block::deserialize(&pkg.content).1;
+            let blockchain = &mut blockchain.lock().unwrap();
+            blockchain.resolve_fork(&block);
+
+            // TODO: restart mining 
+        }
     }
 }
 
