@@ -88,16 +88,20 @@ impl Wallet {
         println!("wallet is offline now");
     }
 
-    pub fn save_blockchain(&self) {
-        save_blockchain(&self.blochchain.lock().unwrap(), &self.get_name());
-    }
-
     pub fn show_network(&self) {
         println!("------- {} network -------\n{}", self.get_name(), self.network.lock().unwrap());
     }
 
     pub fn get_network_len(&self) -> usize {
         return self.network.lock().unwrap().get_len();
+    }
+
+    pub fn get_cur_hash(&self) -> u64 {
+        return self.blockchain.lock().unwrap().cur_hash;
+    }
+
+    pub fn get_tx_ids(&self) -> Vec<u64> {
+        return self.blockchain.lock().unwrap().get_tx_ids();
     }
 
     pub fn get_name(&self) -> String {

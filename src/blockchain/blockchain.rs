@@ -51,6 +51,10 @@ impl Blockchain {
         return self.blocks.len();
     }
 
+    pub fn get_tx_ids(&self) -> Vec<u64> {
+        return self.blocks.iter().map(|b| b.get_tx_id()).collect();
+    }
+
     fn verify(&self, block: &Block) -> bool {
         return block.prev_hash == self.cur_hash;
     }
