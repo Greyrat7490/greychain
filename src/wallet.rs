@@ -28,7 +28,7 @@ pub struct Wallet {
     priv_key: RsaPrivateKey,
     sign_key: BlindedSigningKey<Sha256>,
 
-    blochchain: Arc<Mutex<Blockchain>>,
+    blockchain: Arc<Mutex<Blockchain>>,
     online: Arc<Mutex<bool>>,
     idling: Arc<Mutex<bool>>,
     recv_thread: JoinHandle<()>,
@@ -60,7 +60,7 @@ impl Wallet {
         network.lock().unwrap().update_status(pub_key_pem.clone(), port, true, sign_key.clone());
 
         println!("created new wallet at port {}", port);
-        return Wallet{ port, online, idling, recv_thread, priv_key, pub_key, blochchain, network, pub_key_pem, sign_key };
+        return Wallet{ port, online, idling, recv_thread, priv_key, pub_key, blockchain: blochchain, network, pub_key_pem, sign_key };
     }
 
     pub fn send_tx(&self, payee: &String, amount: f64) {
@@ -83,7 +83,7 @@ impl Wallet {
         *self.online.lock().unwrap() = false;
         self.recv_thread.join().unwrap();
 
-        save_blockchain(&self.blochchain.lock().unwrap(), &format!("wallet{}", self.port));
+        save_blockchain(&self.blockchain.lock().unwrap(), &format!("wallet{}", self.port));
 
         println!("wallet is offline now");
     }
