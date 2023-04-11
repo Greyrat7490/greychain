@@ -25,6 +25,7 @@ fn main() {
 
     let txs = wallets[0].get_tx_ids();
     let hashes = wallets.iter().map(|w| w.get_cur_hash()).collect::<Vec<u64>>();
+    let blockchain_hashes = wallets[0].get_blockchain_hashes();
     let net_lens = wallets.iter().map(|w| w.get_network_len()).collect::<Vec<usize>>();
 
     shutdown_test_wallets(wallets);
@@ -33,6 +34,9 @@ fn main() {
     println!("pkgs total send: {}", get_pkgs_send()); 
     println!("net_lens: {:?}", net_lens);
     println!("hashes:\n{}", hashes.iter().map(|h| {h.to_string() + "\n"}).collect::<String>());
+    println!("blockchain hashes:\n{}", blockchain_hashes.iter()
+             .map(|(prev, cur)| prev.to_string() + "\n" + &cur.to_string() + "\n")
+             .collect::<String>());
     println!("txs: {:?}", txs); 
     println!("txs count: {:?}", txs.len()); 
     println!("-------------------"); 

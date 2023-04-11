@@ -74,6 +74,10 @@ impl Blockchain {
         return self.blocks.iter().map(|b| b.tx.id).collect();
     }
 
+    pub fn get_hashes(&self) -> Vec<(u64, u64)> {
+        return self.blocks.iter().map(|b| (b.prev_hash, b.hash)).collect::<Vec<(u64, u64)>>();
+    }
+
     fn verify(&self, block: &Block, round: usize) -> bool {
         if round == 0 {
             return block.prev_hash == 0x0;

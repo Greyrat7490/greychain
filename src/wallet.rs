@@ -104,6 +104,10 @@ impl Wallet {
         return self.blockchain.lock().unwrap().get_tx_ids();
     }
 
+    pub fn get_blockchain_hashes(&self) -> Vec<(u64, u64)> {
+        return self.blockchain.lock().unwrap().get_hashes();
+    }
+
     pub fn get_name(&self) -> String {
         return format!("wallet{}", self.port);
     }
