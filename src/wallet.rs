@@ -97,7 +97,7 @@ impl Wallet {
     }
 
     pub fn get_cur_hash(&self) -> u64 {
-        return self.blockchain.lock().unwrap().cur_hash;
+        return self.blockchain.lock().unwrap().get_cur_hash();
     }
 
     pub fn get_tx_ids(&self) -> Vec<u64> {
