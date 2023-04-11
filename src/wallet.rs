@@ -41,7 +41,7 @@ impl Wallet {
         let pub_key_pem = pub_key.to_public_key_pem(rsa::pkcs8::LineEnding::LF).unwrap();
         let sign_key = BlindedSigningKey::<Sha256>::from(priv_key.clone());
 
-        let blochchain = Arc::new(Mutex::new(Blockchain::new()));
+        let blockchain = Arc::new(Mutex::new(Blockchain::new()));
 
         let online = Arc::new(Mutex::new(true));
         let idling = Arc::new(Mutex::new(false));
@@ -54,13 +54,13 @@ impl Wallet {
             Arc::clone(&online),
             Arc::clone(&idling),
             listener,
-            Arc::clone(&blochchain),
+            Arc::clone(&blockchain),
             Arc::clone(&network)
         );
         network.lock().unwrap().update_status(pub_key_pem.clone(), port, true, sign_key.clone());
 
         println!("created new wallet at port {}", port);
-        return Wallet{ port, online, idling, recv_thread, priv_key, pub_key, blockchain: blochchain, network, pub_key_pem, sign_key };
+        return Wallet{ port, online, idling, recv_thread, priv_key, pub_key, blockchain, network, pub_key_pem, sign_key };
     }
 
     pub fn send_tx(&self, payee: &String, amount: f64) {
