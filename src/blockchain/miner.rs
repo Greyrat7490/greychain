@@ -7,12 +7,12 @@ use std::{
 
 use rand::random;
 
-use super::{Transaction, Block};
+use super::Transaction;
 
-const DIFFICULTY: u64 = u64::MAX >> 24;
+const DIFFICULTY: u64 = u64::MAX >> 20;
 
 pub struct Miner {
-    queue: VecDeque<Block>,
+    queue: VecDeque<(Transaction, usize)>,
     send_req: Sender<u64>,
     recv_res: Receiver<u64>,
     online: Arc<Mutex<bool>>,
@@ -23,7 +23,7 @@ impl Miner {
     pub fn new() -> Miner {
         let (send_req, recv_req) = channel::<u64>();
         let (send_res, recv_res) = channel::<u64>();
-        let queue = VecDeque::<Block>::new();
+        let queue = VecDeque::<(Transaction, usize)>::new();
 
         let online = Arc::new(Mutex::new(true));
 
@@ -31,20 +31,20 @@ impl Miner {
         return Miner { queue, send_req, recv_res, online, thread }
     }
 
-    pub fn add_tx(&mut self, tx: Transaction, prev_hash: u64, round: usize) {
-        // TODO no blocks with same round
-        let (block, nonce) = Block::new_invalid(tx, prev_hash, round);
+    pub fn add_tx(&mut self, tx: Transaction, round: usize) {
+        for (t, _) in &self.queue {
+            if t == &tx { return; }
+        }
 
-        self.queue.push_back(block);
+        let nonce = tx.gen_nonce();
+        self.queue.push_back((tx, round));
         self.send_req.send(nonce);
     }
 
-    pub fn recv_block(&mut self) -> Option<Block> {
+    pub fn recv_solution(&mut self) -> Option<(Transaction, u64, usize)> {
         if let Ok(solution) = self.recv_res.try_recv() {
-            if let Some(mut block) = self.queue.pop_front() {
-                block.complete(solution);
-                println!("mined block for tx id {}", block.get_tx_id());
-                return Some(block);
+            if let Some((tx, round)) = self.queue.pop_front() {
+                return Some((tx, solution, round));
             }
         }
 

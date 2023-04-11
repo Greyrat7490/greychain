@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::atomic::AtomicU64, hash::Hash};
+use std::{fmt::Display, sync::atomic::AtomicU64, hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
 
 use crate::net::serialize::Serializer;
 
@@ -21,11 +21,23 @@ impl Transaction {
 
         return Transaction { id, payer: payer.to_owned(), payee: payee.to_owned(), amount };
     }
+
+    pub fn gen_nonce(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        return hasher.finish();
+    }
 }
 
 impl Display for Transaction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         return write!(f, "id: {}\namount: {} GRY\npayer:\n{}payee:\n{}", self.id, self.amount, self.payer, &self.payee);
+    }
+}
+
+impl PartialEq for Transaction {
+    fn eq(&self, other: &Self) -> bool {
+        return self.id == other.id;
     }
 }
 

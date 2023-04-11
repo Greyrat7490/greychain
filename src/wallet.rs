@@ -124,7 +124,6 @@ fn recv_loop(pub_key: String, sign_key: BlindedSigningKey::<Sha256>,
 
     return thread::spawn(move || {
         let mut miner = Miner::new();
-        let mut later_blocks = Vec::<Block>::new();
 
         while *online.lock().unwrap() {
             let stream = listener.accept();
@@ -132,23 +131,19 @@ fn recv_loop(pub_key: String, sign_key: BlindedSigningKey::<Sha256>,
             if let Ok((stream, _)) = stream {
                 *idling.lock().unwrap() = false;
                 let pkg = recv(stream);
-                handle_pkg(&pub_key, &sign_key, pkg, &blockchain, &network, &mut miner, &mut later_blocks);
+                handle_pkg(&pub_key, &sign_key, pkg, &blockchain, &network, &mut miner);
             } else if miner.is_idling() {
                 *idling.lock().unwrap() = true;
             }
 
-            if let Some(block) = miner.recv_block() {
-                let pkg = Package::new(block, PackageType::Block, pub_key.to_string(), sign_key.to_owned());
-                handle_pkg(&pub_key, &sign_key, pkg.clone(), &blockchain, &network, &mut miner, &mut later_blocks);
-                network.lock().unwrap().broadcast(pkg);
-            }
+            if let Some((tx, solution, round)) = miner.recv_solution() {
+                let nonce = tx.gen_nonce();
+                let prev_hash = blockchain.lock().unwrap().get_prev_hash(round);
 
-            if later_blocks.len() != 0 {
-                let blockchain = &mut blockchain.lock().unwrap();
-                while later_blocks[later_blocks.len()-1].round == blockchain.get_round() {
-                    let block = later_blocks.pop().unwrap();
-                    blockchain.add_block(block);
-                }
+                let block = Block::new(tx, prev_hash, round, nonce, solution);
+                let pkg = Package::new(block, PackageType::Block, pub_key.to_string(), sign_key.to_owned());
+                handle_pkg(&pub_key, &sign_key, pkg.clone(), &blockchain, &network, &mut miner);
+                network.lock().unwrap().broadcast(pkg);
             }
         } 
 
@@ -159,14 +154,11 @@ fn recv_loop(pub_key: String, sign_key: BlindedSigningKey::<Sha256>,
 fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Package,
               blockchain: &Arc<Mutex<Blockchain>>,
               network: &Arc<Mutex<Network>>,
-              miner: &mut Miner,
-              later_blocks: &mut Vec<Block>) {
+              miner: &mut Miner) {
     match pkg.typ {
         PackageType::Tx => {
             let tx = Transaction::deserialize(&pkg.content).1;
-
-            let blockchain = blockchain.lock().unwrap();
-            miner.add_tx(tx, blockchain.cur_hash, blockchain.get_round());
+            miner.add_tx(tx, blockchain.lock().unwrap().get_round());
         }
 
         PackageType::Status => {
@@ -208,33 +200,8 @@ fn handle_pkg(pub_key: &String, sign_key: &BlindedSigningKey::<Sha256>, pkg: Pac
 
         PackageType::Block => {
             let block = Block::deserialize(&pkg.content).1;
-
             let blockchain = &mut blockchain.lock().unwrap();
-            // block for this round
-            if block.round == blockchain.get_round() {
-                blockchain.add_block(block);
-
-            // block for later
-            } else if block.round > blockchain.get_round() {
-                let round = block.round;
-                later_blocks.push(block);
-                later_blocks.sort_by(|b1, b2| b2.round.cmp(&b1.round) );
-                println!("block for later (round: {})", round);
-
-            // potential fork
-            } else if blockchain.resolve_fork(&block) {
-                let network = &mut network.lock().unwrap();
-                let pkg = Package::new(block, PackageType::Fork, pub_key.to_string(), sign_key.to_owned());
-                network.broadcast(pkg);
-            }
-        }
-
-        PackageType::Fork => {
-            let block = Block::deserialize(&pkg.content).1;
-            let blockchain = &mut blockchain.lock().unwrap();
-            blockchain.resolve_fork(&block);
-
-            // TODO: restart mining 
+            blockchain.add_block(&block);
         }
     }
 }

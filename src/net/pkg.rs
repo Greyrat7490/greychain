@@ -21,7 +21,7 @@ pub const PKG_SIZE: usize = size_of::<PackageType>() +
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 pub enum PackageType {
-    Tx, Status, NodesRes, Block, Fork
+    Tx, Status, NodesRes, Block
 }
 
 #[derive(Clone)]
@@ -103,10 +103,6 @@ impl Display for Package {
 
             PackageType::Block => {
                 "BLOCK PACKAGE CONTENT\n".to_string()
-            }
-
-            PackageType::Fork => {
-                "FORK PACKAGE CONTENT\n".to_string()
             }
 
             PackageType::NodesRes => {

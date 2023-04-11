@@ -9,36 +9,26 @@ pub struct Block {
     pub prev_hash: u64,
     pub round: usize,
     pub timestamp: u128,
-    tx: Transaction,
+    pub tx: Transaction,
     nonce: u64,
     solution: u64,
     pub hash: u64,
 }
 
 impl Block {
-    pub fn new_invalid(tx: Transaction, prev_hash: u64, round: usize) -> (Block, u64) {
+    pub fn new(tx: Transaction, prev_hash: u64, round: usize, nonce: u64, solution: u64) -> Block {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros();
-        let nonce = Self::gen_nonce(&tx, prev_hash, round, timestamp);
-
-        return (Block { prev_hash, tx, hash: 0x0, round, timestamp, nonce, solution: 0x0 }, nonce);
+        let hash = Self::gen_hash(&tx, prev_hash, round, timestamp, nonce, solution);
+        return Block { prev_hash, tx, hash, round, timestamp, nonce, solution };
     }
 
-    pub fn complete(&mut self, solution: u64) {
-        self.solution = solution;
+    pub fn rehash(&mut self, new_prev_hash: u64) {
+        self.prev_hash = new_prev_hash;
         self.hash = Self::gen_hash(&self.tx, self.prev_hash, self.round, self.timestamp, self.nonce, self.solution);
     }
 
-    pub fn get_tx_id(&self) -> u64 {
-        return self.tx.id;
-    }
-
-    fn gen_nonce(tx: &Transaction, prev_hash: u64, round: usize, timestamp: u128) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        prev_hash.hash(&mut hasher);
-        round.hash(&mut hasher);
-        timestamp.hash(&mut hasher);
-        tx.hash(&mut hasher);
-        return hasher.finish();
+    pub fn get_minig_hash(&self) -> u64 {
+        return Miner::gen_mining_hash(self.nonce, self.solution);
     }
 
     fn gen_hash(tx: &Transaction, prev_hash: u64, round: usize, timestamp: u128, nonce: u64, solution: u64) -> u64 {
