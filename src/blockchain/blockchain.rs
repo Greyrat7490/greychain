@@ -24,7 +24,6 @@ impl Blockchain {
 
                     if self.blocks[round].tx == block.tx {
                         self.blocks[round] = block.to_owned();
-                        println!("discard tx id {}", block.tx.id);
                     } else {
                         self.blocks.retain(|b| b.tx != block.tx);
                         self.blocks.insert(round, block.to_owned());
@@ -35,7 +34,6 @@ impl Blockchain {
                     for (i, b) in self.blocks[round..].iter().enumerate() {
                         if b.tx == block.tx {
                             // discard block
-                            println!("discard tx id {}", block.tx.id);
                             return;
                         }
 

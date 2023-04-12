@@ -38,7 +38,10 @@ impl Miner {
 
         let nonce = tx.gen_nonce();
         self.queue.push_back((tx, round));
-        self.send_req.send(nonce);
+        if self.send_req.send(nonce).is_err() {
+            self.queue.pop_back();
+            eprintln!("ERROR: could not add tx to miner");
+        }
     }
 
     pub fn recv_solution(&mut self) -> Option<(Transaction, u64, usize)> {
@@ -72,7 +75,9 @@ impl Miner {
             loop {
                 if let Ok(nonce) = recv.try_recv() {
                     let solution = Self::mine(nonce);
-                    send.send(solution);
+                    if send.send(solution).is_err() {
+                        break;
+                    }
                 } else if !*online.lock().unwrap() {
                     break;
                 }
@@ -81,7 +86,6 @@ impl Miner {
     }
 
     fn mine(nonce: u64) -> u64 {
-        println!("mining...");
         let mut solution = random::<u64>();
 
         while !Self::verify(nonce, solution) {

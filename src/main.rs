@@ -14,7 +14,7 @@ extern crate rand;
 extern crate digest;
 
 fn main() {
-    const WALLETS_COUNT: usize = 3;
+    const WALLETS_COUNT: usize = 7;
     const TXS_PER_WALLET: usize = 3;
 
     let wallets = create_test_wallets(WALLETS_COUNT);
@@ -22,6 +22,8 @@ fn main() {
     create_txs(&wallets, TXS_PER_WALLET);
 
     wait_for_wallets(&wallets);
+
+    wallets[0].show_network();
 
     let txs = wallets[0].get_tx_ids();
     let hashes = wallets.iter().map(|w| w.get_cur_hash()).collect::<Vec<u64>>();
@@ -74,13 +76,18 @@ mod tests {
     }
 
     #[test]
-    fn txs_3wallet_2tx() {
+    fn txs_3wallets_2tx() {
         check_txs(3, 2);
     }
 
     #[test]
-    fn txs_4wallet_4tx() {
+    fn txs_4wallets_4tx() {
         check_txs(4, 4);
+    }
+
+    #[test]
+    fn txs_14wallets_4tx() {
+        check_txs(14, 4);
     }
 
 
@@ -152,7 +159,7 @@ mod tests {
 
 fn create_test_wallets(wallets_count: usize) -> Vec<Wallet> {
     let mut wallets = Vec::<Wallet>::with_capacity(wallets_count);
-    wallets.push(Wallet::new(&vec![]));
+    wallets.push(Wallet::new_master_node());
 
     let master_nodes = vec![Node{ pub_key: wallets[0].pub_key_pem.clone(), port: wallets[0].port, online: true}];
     wallets.resize_with(wallets_count, || { Wallet::new(&master_nodes) });

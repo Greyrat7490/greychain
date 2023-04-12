@@ -31,17 +31,17 @@ pub fn init_receiver() -> Option<(u16, TcpListener)> {
     return Some((port, listener));
 }
 
-// TODO to Option
-pub fn recv(mut stream: TcpStream) -> Package {
+pub fn recv(mut stream: TcpStream) -> Option<Package> {
     let mut buf = [0; PKG_SIZE];
     stream.read_exact(&mut buf).unwrap();
 
     let pkg = Package::deserialize(buf);
     if !pkg.verify() {
-        println!("ERROR: package is corrupted");
+        eprintln!("ERROR: package is corrupted");
+        return None;
     }
 
-    return pkg;
+    return Some(pkg);
 }
 
 pub fn send(mut stream: TcpStream, pkg: Package) {
